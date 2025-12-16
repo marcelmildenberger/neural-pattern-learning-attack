@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Encode-first corruption pipeline: add noise to encoded FakeName TSVs while
+Encode-first corruption pipeline: add noise to encoded TSVs while
 ignoring the last two columns (encoding + uid), then swap encodings between
-records. Expects files like fakename_*_bf_encoded.tsv etc. in --input-dir.
+records. Expects files like fakename_50k_bf_encoded.tsv etc. in --input-dir.
 """
 import argparse
 import csv
@@ -12,7 +12,6 @@ import re
 from datetime import datetime, timedelta
 from typing import Dict, Iterable, List, Sequence
 
-# --- Noise helpers (from pre_generate_noisy_fakename.py) ---
 def clamp(prob: float, maximum: float = 0.95) -> float:
     return max(0.0, min(prob, maximum))
 
@@ -154,10 +153,10 @@ def mutate_encoded_row(row: Dict[str, str], fieldnames: Sequence[str], rng: rand
 # --- Swap helpers (from swap_encoded_rows.py) ---
 def iter_encoded_files(input_dir: pathlib.Path) -> Iterable[pathlib.Path]:
     patterns = [
-        "fakename_*_bf_encoded.tsv",
-        "fakename_*_bfd_encoded.tsv",
-        "fakename_*_tmh_encoded.tsv",
-        "fakename_*_tsh_encoded.tsv",
+        "*_bf_encoded.tsv",
+        "*_bfd_encoded.tsv",
+        "*_tmh_encoded.tsv",
+        "*_tsh_encoded.tsv",
     ]
     for pattern in patterns:
         for path in sorted(input_dir.glob(pattern)):
@@ -199,11 +198,11 @@ def process_encoded_file(path: pathlib.Path, output_dir: pathlib.Path, rng: rand
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Add noise to encoded FakeName TSVs (ignoring encoding+uid) and swap encodings between records."
+        description="Add noise to encoded TSVs (ignoring encoding+uid) and swap encodings between records."
     )
-    parser.add_argument("--input-dir", type=pathlib.Path, required=True, help="Directory containing fakename_*_*_encoded.tsv files.")
+    parser.add_argument("--input-dir", type=pathlib.Path, required=True, help="Directory containing *_*_encoded.tsv files.")
     parser.add_argument("--output-dir", type=pathlib.Path, required=True, help="Directory to write noisy+swapped copies.")
-    parser.add_argument("--noise-level", type=float, default=1.0, help="Scales noise aggressiveness (same as pre_generate_noisy_fakename).")
+    parser.add_argument("--noise-level", type=float, default=1.0, help="Scales noise aggressiveness.")
     parser.add_argument("--swap-prob", type=float, default=0.01, help="Probability per random pair of rows to swap encodings.")
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
     args = parser.parse_args()
@@ -216,7 +215,7 @@ def main() -> None:
 
     files = list(iter_encoded_files(args.input_dir))
     if not files:
-        raise SystemExit(f"No encoded fakename TSV files found under {args.input_dir}")
+        raise SystemExit(f"No encoded TSV files found under {args.input_dir}")
 
     print(f"Adding noise (skip last two cols) and swapping encodings for {len(files)} files -> {args.output_dir}")
     for path in files:
