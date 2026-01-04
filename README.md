@@ -92,7 +92,7 @@ Bloom Filters (BF), Two-Step Hashing (TSH), and Tabulation MinHash (TMH).
 
 ## Additional Documentation
 
-Can be found in [docs](docs)
+Additional Information about Noisy Datasets, Parameters and Reproduction can be found in [docs](docs)
 
 
 ## Citation
