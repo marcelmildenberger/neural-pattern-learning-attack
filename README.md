@@ -14,7 +14,7 @@ The attack consists of two major stages:
 1. **Pattern Mining** – A neural model learns mappings between encodings and their constituent *q-grams* (substrings of the original identifiers). This is framed as a multi-label classification task.
 2. **Plaintext Reconstruction** – The predicted q-grams are assembled into complete identifiers using a graph-based reconstruction algorithm.
 
-For a detailed description of the attacker model, theoretical background, and evaluation results, see the paper.
+For a detailed description of the attacker model, theoretical background, and evaluation results, see the paper <placeholder>.
 
 
 ## Getting Started with Docker
