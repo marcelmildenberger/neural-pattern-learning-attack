@@ -1,9 +1,9 @@
 
 import copy
 import torch
-from utils.pytorch_base_model import BaseModel
-from utils.early_stopping import EarlyStopping
-from utils.utils import calculate_performance_metrics, decode_labels_to_bi_grams, filter_high_scoring_bi_grams, load_experiment_datasets, map_probabilities_to_bi_grams, run_epoch
+from nepal.utils.pytorch_base_model import BaseModel
+from nepal.utils.early_stopping import EarlyStopping
+from nepal.utils.utils import calculate_performance_metrics, decode_labels_to_bi_grams, filter_high_scoring_bi_grams, load_experiment_datasets, map_probabilities_to_bi_grams, run_epoch
 from torch.utils.data import DataLoader
 import torch.optim as optim
 import torch.nn as nn
@@ -181,4 +181,4 @@ def hyperparameter_training(config, data_dir, output_dim, alice_enc_hash, identi
             "len_val": len(dataloader_val.dataset),
             "epochs": epochs
     }
-    train.report(metrics)
+    tune.report(metrics)

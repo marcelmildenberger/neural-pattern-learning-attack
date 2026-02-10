@@ -1,7 +1,0 @@
-Used columns: ['GivenName', 'Surname', 'Birthday']
-Average entry length: 21
-Maximum entry length: 30
-Top 20 2-grams: ['19', '11', 'ar', 'er', 'an', '12', 'on', '21', '98', 'll', '96', '94', '97', 'le', 'el', '99', 'ma', 'en', '31', '95']
-Precision: 0.2162
-Recall: 0.2476
-F1 Score: 0.2300

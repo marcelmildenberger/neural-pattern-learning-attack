@@ -15,11 +15,12 @@ import torch
 from tqdm import tqdm
 import pickle
 from torch.utils.data import random_split, Subset
-from pytorch_datasets.bloom_filter_dataset import BloomFilterDataset
-from pytorch_datasets.tab_min_hash_dataset import TabMinHashDataset
-from pytorch_datasets.two_step_hash_dataset import TwoStepHashDataset
+from nepal.pytorch_datasets.bloom_filter_dataset import BloomFilterDataset
+from nepal.pytorch_datasets.roundbased_encoding_scheme_dataset import RoundBasedEncodingSchemeDataset
+from nepal.pytorch_datasets.tab_min_hash_dataset import TabMinHashDataset
+from nepal.pytorch_datasets.two_step_hash_dataset import TwoStepHashDataset
 import seaborn as sns
-from utils.string_utils import *
+from nepal.utils.string_utils import *
 import random
 
 
@@ -438,6 +439,8 @@ def create_synthetic_data_splits(GLOBAL_CONFIG, ENC_CONFIG, data_dir, alice_enc_
         encoded_file = f"{base_path}_tmh_encoded.tsv"
     elif algo == "TwoStepHash":
         encoded_file = f"{base_path}_tsh_encoded.tsv"
+    elif algo == "RoundBasedEncoder":
+        encoded_file = f"{base_path}_rbes_encoded.tsv"
     else:
         raise ValueError(f"Unsupported encoding algorithm: {algo}")
 
@@ -510,6 +513,8 @@ def load_experiment_datasets(
         DatasetClass = TabMinHashDataset
     elif algo == "TwoStepHash":
         DatasetClass = TwoStepHashDataset
+    elif algo == "RoundBasedEncoder":
+        DatasetClass = RoundBasedEncodingSchemeDataset
 
     if ENC_CONFIG["AliceAlgo"] == "TwoStepHash":
         # Calculate unique integers from the complete dataset to ensure consistent tensor dimensions
@@ -688,4 +693,3 @@ def plot_metric_distributions(results_df, trained_model_directory, save=False):
         out_path = os.path.join(trained_model_directory, "metric_distributions.png")
         plt.savefig(out_path)
     plt.close()
-
