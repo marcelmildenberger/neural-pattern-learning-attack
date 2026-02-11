@@ -441,6 +441,8 @@ def create_synthetic_data_splits(GLOBAL_CONFIG, ENC_CONFIG, data_dir, alice_enc_
         encoded_file = f"{base_path}_tsh_encoded.tsv"
     elif algo == "RoundBasedEncoder":
         encoded_file = f"{base_path}_rbes_encoded.tsv"
+    elif algo == "Saul":
+        encoded_file = f"{base_path}_saul_encoded.tsv"
     else:
         raise ValueError(f"Unsupported encoding algorithm: {algo}")
 
@@ -514,6 +516,8 @@ def load_experiment_datasets(
     elif algo == "TwoStepHash":
         DatasetClass = TwoStepHashDataset
     elif algo == "RoundBasedEncoder":
+        DatasetClass = RoundBasedEncodingSchemeDataset
+    elif algo == "Saul":
         DatasetClass = RoundBasedEncodingSchemeDataset
 
     if ENC_CONFIG["AliceAlgo"] == "TwoStepHash":
