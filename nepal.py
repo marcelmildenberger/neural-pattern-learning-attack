@@ -537,4 +537,4 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
             output_dir=current_experiment_directory
         )
 
-    return 0
+    return avg_dice
