@@ -516,11 +516,11 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     if GLOBAL_CONFIG["BenchMode"]:
         start_refinement_and_reconstruction = time.time()
 
-    header = read_header(GLOBAL_CONFIG["Data"])
+    # header = read_header(GLOBAL_CONFIG["Data"])
     
-    df_not_reid_cached = get_not_reidentified_df(data_dir, identifier, alice_enc_hash=alice_enc_hash)
+    # df_not_reid_cached = get_not_reidentified_df(data_dir, identifier, alice_enc_hash=alice_enc_hash)
 
-    run_reidentification_greedy(results, header, df_not_reid_cached, current_experiment_directory=current_experiment_directory)
+    # run_reidentification_greedy(results, header, df_not_reid_cached, current_experiment_directory=current_experiment_directory)
 
     # Stop timing the refinement and reconstruction.
     if GLOBAL_CONFIG["BenchMode"] and start_total is not None:
