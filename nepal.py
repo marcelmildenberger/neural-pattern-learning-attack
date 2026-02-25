@@ -229,32 +229,6 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     # Add early stopping based on optimization metric threshold (default 0.99, configurable)
     early_stop_threshold = NEPAL_CONFIG.get("EarlyStopThreshold", 0.99)
 
-    # Ray 2.9: early termination can be handled via Stopper; emulate metric threshold
-    class MetricThresholdStopper(tune.stopper.Stopper):
-        def __init__(self, metric, mode, threshold):
-            self.metric = metric
-            self.mode = mode
-            self.threshold = threshold
-            self.should_stop = False
-
-        def __call__(self, trial_id, result):
-            if self.metric in result:
-                value = result[self.metric]
-                if (self.mode == "max" and value >= self.threshold) or (
-                    self.mode == "min" and value <= self.threshold
-                ):
-                    self.should_stop = True
-            return self.should_stop
-
-        def stop_all(self):
-            return self.should_stop
-
-    stopper = MetricThresholdStopper(
-        metric=NEPAL_CONFIG["MetricToOptimize"],
-        mode="max",
-        threshold=early_stop_threshold,
-    )
-
     tuner = tune.Tuner(
         trainable_with_resources,
         tune_config=tune.TuneConfig(
@@ -264,7 +238,6 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         ),
         run_config=train.RunConfig(
             name="nepal_hpo",
-            stopper=stopper,
         ),
         param_space=search_space,
     )
