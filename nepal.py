@@ -19,6 +19,7 @@ from utils.pytorch_base_model import BaseModel
 from utils.utils import *
 import ray
 from ray import tune, train
+from ray.tune import RunConfig
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
 
@@ -236,8 +237,9 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
             scheduler=scheduler,
             num_samples=NEPAL_CONFIG["NumSamples"],
         ),
-        run_config=train.RunConfig(
+        run_config=RunConfig(
             name="nepal_hpo",
+            verbose=1,  # 0=silent, 1=default, 2=verbose in Ray Tune
         ),
         param_space=search_space,
     )
