@@ -172,14 +172,14 @@ def hyperparameter_training(config, data_dir, output_dim, alice_enc_hash, identi
         total_f1 += f1
         num_samples += data.size(0)
     metrics = {
-            "average_dice": total_dice / num_samples,
-            "average_precision": total_precision / num_samples,
-            "average_recall": total_recall / num_samples,
-            "average_f1": total_f1 / num_samples,
-            "total_val_loss": total_val_loss,
-            "len_train": len(dataloader_train.dataset),
-            "len_val": len(dataloader_val.dataset),
-            "epochs": epochs
+        "average_dice": total_dice / num_samples,
+        "average_precision": total_precision / num_samples,
+        "average_recall": total_recall / num_samples,
+        "average_f1": total_f1 / num_samples,
+        "total_val_loss": total_val_loss,
+        "len_train": len(dataloader_train.dataset),
+        "len_val": len(dataloader_val.dataset),
+        "epochs": epochs,
     }
-    # Ray Tune (v2.9) expects tune.report in function trainables
-    tune.report(**metrics)
+    # Ray Tune (v2.9) expects metrics dict via the `metrics` kwarg
+    tune.report(metrics=metrics)
