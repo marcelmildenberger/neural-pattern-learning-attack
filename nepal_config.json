@@ -1,7 +1,7 @@
 {
     "GLOBAL_CONFIG": {
-        "Data": "./data/datasets/noisy/fakename_1k.tsv",
-        "Overlap": 0.5,
+        "Data": "./data/datasets/fakename_2k.tsv",
+        "Overlap": 1,
         "DropFrom": "Eve",
         "Verbose": false,
         "MatchingMetric": "cosine",
@@ -14,7 +14,7 @@
         "UseGPU": true,
         "SaveModel": false,
         "SavePredictions": false,
-        "UseNoisyDatasets": true,
+        "UseNoisyDatasets": false,
         "GraphMatchingAttack": false
     },
     "ENC_CONFIG": {
@@ -97,8 +97,8 @@
         "TrainSize": 0.8,
         "Patience": 5,
         "MinDelta": 0.0001,
-        "NumSamples": 10,
-        "ParallelTrials": 5,
+        "NumSamples": 30,
+        "ParallelTrials": 2,
         "Epochs": 25,
         "MetricToOptimize": "average_dice",
         "MatchingTechnique": "greedy"

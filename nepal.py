@@ -137,7 +137,7 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     datasets = load_experiment_datasets(data_dir, alice_enc_hash, identifier, ENC_CONFIG, NEPAL_CONFIG, GLOBAL_CONFIG, all_bi_grams, splits=("train", "val", "test"))
     data_train, data_val, data_test = datasets["train"], datasets["val"], datasets["test"]
     if len(data_train) == 0 or len(data_val) == 0 or len(data_test) == 0:
-        # Save termination log as CSV for better analysis
+        # Save termination log as CSV for better analysis and exit early to avoid crashes downstream
         termination_data = {
             "metric": ["Status", "Length of data_train", "Length of data_val", "Length of data_test"],
             "value": ["Training process canceled due to empty dataset", len(data_train), len(data_val), len(data_test)]
@@ -146,9 +146,21 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         termination_csv_path = os.path.join(current_experiment_directory, "termination_log.csv")
         termination_df.to_csv(termination_csv_path, index=False)
 
-        # Run hyperparameter optimization
-            
-            
+        if GLOBAL_CONFIG["BenchMode"] and start_total is not None:
+            elapsed_total = time.time() - start_total
+            save_nepal_runtime_log(
+                elapsed_gma=elapsed_gma,
+                elapsed_hyperparameter_optimization=elapsed_hyperparameter_optimization,
+                elapsed_model_training=elapsed_model_training,
+                elapsed_application_to_encoded_data=elapsed_application_to_encoded_data,
+                elapsed_refinement_and_reconstruction=elapsed_refinement_and_reconstruction,
+                elapsed_total=elapsed_total,
+                output_dir=current_experiment_directory
+            )
+
+        if GLOBAL_CONFIG.get("Verbose", False):
+            print("[INFO] Terminating run because one or more dataset splits are empty.")
+        return 1
     # Start timing the hyperparameter optimization run.
     if GLOBAL_CONFIG["BenchMode"]:
         start_hyperparameter_optimization = time.time()
@@ -284,7 +296,8 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         num_workers=GLOBAL_CONFIG["Workers"] // 15 if GLOBAL_CONFIG["UseGPU"] else 0,
     )
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # Respect the user's GPU toggle; fall back to CPU even if CUDA is available when UseGPU is False
+    device = torch.device("cuda:0" if use_gpu and torch.cuda.is_available() else "cpu")
     
     model = BaseModel(
         input_dim=input_dim,
@@ -458,6 +471,13 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
 
     model.eval()
     dataloader_iter = tqdm(dataloader_test, desc="Test loop") if GLOBAL_CONFIG["Verbose"] else dataloader_test
+    # Prepare per-bigram accounting structures
+    bi_gram_to_idx = {v: k for k, v in bi_gram_dict.items()}
+    num_bi_grams = len(all_bi_grams)
+    pred_counts = [0] * num_bi_grams  # how often each bi-gram was predicted
+    true_counts = [0] * num_bi_grams  # how often each bi-gram appears in ground truth
+    tp_counts = [0] * num_bi_grams    # true positives per bi-gram
+
     with torch.no_grad():
         for data, labels, uids in dataloader_iter:
             data, labels = data.to(device), labels.to(device)
@@ -473,6 +493,22 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
             total_recall += recall
             total_f1 += f1
             num_samples += bs
+
+            # Update per-bigram counts (use sets to avoid double-counting within a record)
+            for actual_set, predicted_set in zip(map(set, actual_bi_grams), map(set, predicted_filtered)):
+                for gram in actual_set:
+                    idx = bi_gram_to_idx.get(gram)
+                    if idx is not None:
+                        true_counts[idx] += 1
+                for gram in predicted_set:
+                    idx = bi_gram_to_idx.get(gram)
+                    if idx is not None:
+                        pred_counts[idx] += 1
+                for gram in actual_set & predicted_set:
+                    idx = bi_gram_to_idx.get(gram)
+                    if idx is not None:
+                        tp_counts[idx] += 1
+
             for uid, actual, predicted in zip(uids, actual_bi_grams, predicted_filtered):
                 metrics = metrics_per_entry(actual, predicted)
                 results.append({
@@ -489,6 +525,43 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     avg_precision = total_precision / num_samples
     avg_recall = total_recall / num_samples
     avg_f1 = total_f1 / num_samples
+
+    # --- Per-bigram precision / recall / F1 and dataset frequency ---
+    df_all_records = load_dataframe(path_all)
+    dataset_occurrence_counts = [0] * num_bi_grams  # number of records containing each bi-gram
+    for _, row in df_all_records.iterrows():
+        # Drop encoding + uid (last two columns) to mirror training label construction
+        record_string = "".join(row.iloc[:-2].astype(str))
+        grams_in_record = set(extract_bi_grams(record_string))
+        for gram in grams_in_record:
+            idx = bi_gram_to_idx.get(gram)
+            if idx is not None:
+                dataset_occurrence_counts[idx] += 1
+    dataset_total_records = len(df_all_records)
+
+    per_bigram_rows = []
+    for gram in all_bi_grams:
+        idx = bi_gram_to_idx[gram]
+        tp = tp_counts[idx]
+        pred = pred_counts[idx]
+        true = true_counts[idx]
+        precision_bg = tp / pred if pred else 0.0
+        recall_bg = tp / true if true else 0.0
+        f1_bg = 2 * precision_bg * recall_bg / (precision_bg + recall_bg) if (precision_bg + recall_bg) else 0.0
+        dataset_pct = dataset_occurrence_counts[idx] / dataset_total_records if dataset_total_records else 0.0
+        per_bigram_rows.append({
+            "bigram": gram,
+            "precision": precision_bg,
+            "recall": recall_bg,
+            "f1": f1_bg,
+            "tp": tp,
+            "pred_count": pred,
+            "true_count": true,
+            "dataset_pct": dataset_pct
+        })
+
+    per_bigram_df = pd.DataFrame(per_bigram_rows)
+    per_bigram_df.to_csv(os.path.join(current_experiment_directory, "per_bigram_metrics.csv"), index=False)
 
     # Stop timing the application to encoded data.
     if GLOBAL_CONFIG["BenchMode"] and start_application_to_encoded_data is not None:

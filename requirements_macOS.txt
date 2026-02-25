@@ -30,3 +30,4 @@ tensorboard~=2.13.0
 seaborn
 networkx
 pyarrow==14.0.1
+setuptools<81

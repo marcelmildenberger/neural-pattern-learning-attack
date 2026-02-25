@@ -30,9 +30,15 @@ keys_to_remove = [
     "node_ip", "time_since_restore", "iterations_since_restore", "timestamp"
 ]
 
-def get_cache_path(data_directory, identifier, alice_enc_hash, name="dataset"):
+def get_cache_path(data_directory, identifier, alice_enc_hash, name="dataset", extra_key=""):
+    """Return a cache path that is sensitive to the current experiment setup.
+
+    extra_key can encode settings (e.g., train size, dev mode) that affect the
+    actual dataset splits so we don't accidentally reuse stale caches.
+    """
     os.makedirs(f"{data_directory}/cache", exist_ok=True)
-    return os.path.join(data_directory, "cache", f"{name}_{identifier}_{alice_enc_hash}.pkl")
+    suffix = f"_{extra_key}" if extra_key else ""
+    return os.path.join(data_directory, "cache", f"{name}_{identifier}_{alice_enc_hash}{suffix}.pkl")
 
 def read_tsv(path: str, skip_header: bool = True, as_dict: bool = False, delim: str = "\t") -> Sequence[Sequence[str]]:
     data = {} if as_dict else []
@@ -457,9 +463,10 @@ def create_synthetic_data_splits(GLOBAL_CONFIG, ENC_CONFIG, data_dir, alice_enc_
     n_total = len(all_data) - 1  # Subtract header
     n_reidentified = int(n_total * overlap_ratio)
     
-    # Random sampling
+    # Random sampling (deterministic per identifier to keep splits reproducible)
     indices = list(range(1, len(all_data)))  # Skip header
-    reidentified_indices = random.sample(indices, n_reidentified)
+    rnd = random.Random(int(alice_enc_hash[:8], 16))
+    reidentified_indices = rnd.sample(indices, n_reidentified)
     not_reidentified_indices = [i for i in indices if i not in reidentified_indices]
     
     # Create reidentified data (training data) - full format for training
@@ -488,7 +495,8 @@ def create_synthetic_data_splits(GLOBAL_CONFIG, ENC_CONFIG, data_dir, alice_enc_
 def load_experiment_datasets(
     data_directory, alice_enc_hash, identifier, ENC_CONFIG, nepal_CONFIG, GLOBAL_CONFIG, all_bi_grams, splits=("train", "val", "test")
 ):
-    cache_path = get_cache_path(data_directory, identifier, alice_enc_hash)
+    cache_disambiguator = f"train{nepal_CONFIG['TrainSize']}_dev{GLOBAL_CONFIG['DevMode']}"
+    cache_path = get_cache_path(data_directory, identifier, alice_enc_hash, extra_key=cache_disambiguator)
     # Try to load from cache if all splits are present
     if os.path.exists(cache_path):
         with open(cache_path, 'rb') as f:
@@ -688,4 +696,3 @@ def plot_metric_distributions(results_df, trained_model_directory, save=False):
         out_path = os.path.join(trained_model_directory, "metric_distributions.png")
         plt.savefig(out_path)
     plt.close()
-
