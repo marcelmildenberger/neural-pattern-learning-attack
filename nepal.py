@@ -235,13 +235,13 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
             search_alg=optuna_search,
             scheduler=scheduler,
             num_samples=NEPAL_CONFIG["NumSamples"],
+            # Stop a trial as soon as the optimization metric reaches the
+            # desired threshold (e.g., Dice >= 0.99).
+            stop={NEPAL_CONFIG["MetricToOptimize"]: early_stop_threshold},
         ),
         param_space=search_space,
         run_config=train.RunConfig(
             name="nepal_hpo",
-            # Stop a trial as soon as the optimization metric reaches the
-            # desired threshold (e.g., Dice >= 0.99).
-            stop={NEPAL_CONFIG["MetricToOptimize"]: early_stop_threshold},
         ),
     )
 
