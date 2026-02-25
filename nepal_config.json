@@ -1,6 +1,6 @@
 {
     "GLOBAL_CONFIG": {
-        "Data": "./data/datasets/fakename_2k.tsv",
+        "Data": "./data/datasets/fakename_5k.tsv",
         "Overlap": 0.8,
         "DropFrom": "Eve",
         "Verbose": false,
@@ -18,7 +18,7 @@
         "GraphMatchingAttack": false
     },
     "ENC_CONFIG": {
-        "AliceAlgo": "BloomFilter",
+        "AliceAlgo": "Saul",
         "AliceSecret": "SuperSecretSalt1337",
         "AliceN": 2,
         "AliceMetric": "dice",
@@ -97,7 +97,7 @@
         "TrainSize": 0.8,
         "Patience": 5,
         "MinDelta": 0.0001,
-        "NumSamples": 50,
+        "NumSamples": 75,
         "ParallelTrials": 10,
         "Epochs": 25,
         "MetricToOptimize": "average_dice",

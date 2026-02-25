@@ -11,6 +11,7 @@ import hickle as hkl
 import matplotlib.pyplot as plt
 import networkx as nx
 import pandas as pd
+from pytorch_datasets.roundbased_encoding_scheme_dataset import RoundBasedEncodingSchemeDataset
 import torch
 from tqdm import tqdm
 import pickle
@@ -444,6 +445,8 @@ def create_synthetic_data_splits(GLOBAL_CONFIG, ENC_CONFIG, data_dir, alice_enc_
         encoded_file = f"{base_path}_tmh_encoded.tsv"
     elif algo == "TwoStepHash":
         encoded_file = f"{base_path}_tsh_encoded.tsv"
+    elif algo == "Saul":
+        encoded_file = f"{base_path}_saul_encoded.tsv"
     else:
         raise ValueError(f"Unsupported encoding algorithm: {algo}")
 
@@ -518,6 +521,10 @@ def load_experiment_datasets(
         DatasetClass = TabMinHashDataset
     elif algo == "TwoStepHash":
         DatasetClass = TwoStepHashDataset
+    elif algo == "RoundBasedEncoder":
+        DatasetClass = RoundBasedEncodingSchemeDataset
+    elif algo == "Saul":
+        DatasetClass = RoundBasedEncodingSchemeDataset
 
     if ENC_CONFIG["AliceAlgo"] == "TwoStepHash":
         # Calculate unique integers from the complete dataset to ensure consistent tensor dimensions
