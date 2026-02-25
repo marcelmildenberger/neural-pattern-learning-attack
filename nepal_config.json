@@ -97,8 +97,8 @@
         "TrainSize": 0.8,
         "Patience": 5,
         "MinDelta": 0.0001,
-        "NumSamples": 30,
-        "ParallelTrials": 2,
+        "NumSamples": 50,
+        "ParallelTrials": 10,
         "Epochs": 25,
         "MetricToOptimize": "average_dice",
         "MatchingTechnique": "greedy"
