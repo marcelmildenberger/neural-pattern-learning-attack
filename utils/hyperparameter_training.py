@@ -7,7 +7,7 @@ from utils.utils import calculate_performance_metrics, decode_labels_to_bi_grams
 from torch.utils.data import DataLoader
 import torch.optim as optim
 import torch.nn as nn
-from ray import tune, train
+from ray import tune
 
 # Define a function to train a model with a given configuration.
 # This function is used by Ray Tune to train models with different hyperparameters.
@@ -181,4 +181,5 @@ def hyperparameter_training(config, data_dir, output_dim, alice_enc_hash, identi
             "len_val": len(dataloader_val.dataset),
             "epochs": epochs
     }
-    train.report(metrics)
+    # Ray Tune (v2.9) expects tune.report in function trainables
+    tune.report(**metrics)
