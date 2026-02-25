@@ -560,6 +560,8 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         })
 
     per_bigram_df = pd.DataFrame(per_bigram_rows)
+    # Sort descending by dataset prevalence to make rare/common bigrams easy to scan
+    per_bigram_df = per_bigram_df.sort_values(by="dataset_pct", ascending=False)
     per_bigram_df.to_csv(os.path.join(current_experiment_directory, "per_bigram_metrics.csv"), index=False)
 
     # Stop timing the application to encoded data.
