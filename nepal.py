@@ -460,6 +460,7 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
 
     # Initialize the metrics.
     total_dice = total_precision = total_recall = total_f1 = 0.0
+    rand_total_dice = rand_total_precision = rand_total_recall = rand_total_f1 = 0.0
     num_samples = 0
 
     # Initialize the results.
@@ -516,10 +517,18 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
                 random_predicted_filtered.append([bi_gram_dict[idx] for idx in rand_indices])
             bs = data.size(0)
             dice, precision, recall, f1 = calculate_performance_metrics(actual_bi_grams, predicted_filtered)
+            rand_dice, rand_precision, rand_recall, rand_f1 = calculate_performance_metrics(actual_bi_grams, random_predicted_filtered)
+
             total_dice += dice
             total_precision += precision
             total_recall += recall
             total_f1 += f1
+
+            rand_total_dice += rand_dice
+            rand_total_precision += rand_precision
+            rand_total_recall += rand_recall
+            rand_total_f1 += rand_f1
+
             num_samples += bs
 
             # Update per-bigram counts (use sets to avoid double-counting within a record)
@@ -565,6 +574,10 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     avg_precision = total_precision / num_samples
     avg_recall = total_recall / num_samples
     avg_f1 = total_f1 / num_samples
+    rand_avg_dice = rand_total_dice / num_samples
+    rand_avg_precision = rand_total_precision / num_samples
+    rand_avg_recall = rand_total_recall / num_samples
+    rand_avg_f1 = rand_total_f1 / num_samples
 
     per_bigram_rows = []
     for gram in all_bi_grams:
@@ -610,8 +623,14 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     if GLOBAL_CONFIG["SaveResults"]:
         # Save metrics as CSV for better analysis
         metrics_data = {
-            "metric": ["avg_precision", "avg_recall", "avg_f1", "avg_dice"],
-            "value": [avg_precision, avg_recall, avg_f1, avg_dice]
+            "metric": [
+                "avg_precision", "avg_recall", "avg_f1", "avg_dice",
+                "rand_avg_precision", "rand_avg_recall", "rand_avg_f1", "rand_avg_dice"
+            ],
+            "value": [
+                avg_precision, avg_recall, avg_f1, avg_dice,
+                rand_avg_precision, rand_avg_recall, rand_avg_f1, rand_avg_dice
+            ]
         }
         metrics_df = pd.DataFrame(metrics_data)
         metrics_df.to_csv(f"{trained_model_directory}/metrics.csv", index=False)
