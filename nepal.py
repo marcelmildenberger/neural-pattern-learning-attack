@@ -468,14 +468,36 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     # Initialize the threshold.
     threshold = best_config.get("threshold", 0.5)
 
-    model.eval()
-    dataloader_iter = tqdm(dataloader_test, desc="Test loop") if GLOBAL_CONFIG["Verbose"] else dataloader_test
     # Prepare per-bigram accounting structures
     bi_gram_to_idx = {v: k for k, v in bi_gram_dict.items()}
     num_bi_grams = len(all_bi_grams)
+
+    # --- Dataset-level bigram frequencies (used as prior for random guesser baseline) ---
+    df_all_records = load_dataframe(path_all)
+    dataset_occurrence_counts = [0] * num_bi_grams  # number of records containing each bi-gram
+    for _, row in df_all_records.iterrows():
+        # Drop encoding + uid (last two columns) to mirror training label construction
+        record_string = "".join(row.iloc[:-2].astype(str))
+        grams_in_record = set(extract_bi_grams(record_string))
+        for gram in grams_in_record:
+            idx = bi_gram_to_idx.get(gram)
+            if idx is not None:
+                dataset_occurrence_counts[idx] += 1
+    dataset_total_records = len(df_all_records)
+    dataset_probabilities = [
+        count / dataset_total_records if dataset_total_records else 0.0
+        for count in dataset_occurrence_counts
+    ]
+    # The random guesser predicts each bi-gram independently with probability equal to its dataset prevalence.
+    random_predict_probs = torch.tensor(dataset_probabilities, device=device)
+
+    model.eval()
+    dataloader_iter = tqdm(dataloader_test, desc="Test loop") if GLOBAL_CONFIG["Verbose"] else dataloader_test
     pred_counts = [0] * num_bi_grams  # how often each bi-gram was predicted
     true_counts = [0] * num_bi_grams  # how often each bi-gram appears in ground truth
     tp_counts = [0] * num_bi_grams    # true positives per bi-gram
+    rand_pred_counts = [0] * num_bi_grams  # random guesser predicted count per bi-gram
+    rand_tp_counts = [0] * num_bi_grams    # random guesser true positives per bi-gram
 
     with torch.no_grad():
         for data, labels, uids in dataloader_iter:
@@ -485,6 +507,13 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
             actual_bi_grams = decode_labels_to_bi_grams(bi_gram_dict, labels)
             predicted_scores = map_probabilities_to_bi_grams(bi_gram_dict, probs)
             predicted_filtered = filter_high_scoring_bi_grams(predicted_scores, threshold)
+            # Random baseline predictions sampled from dataset bigram prevalence
+            rand_mask = torch.rand((data.size(0), num_bi_grams), device=device) < random_predict_probs
+            rand_mask_cpu = rand_mask.cpu()
+            random_predicted_filtered = []
+            for rand_row in rand_mask_cpu:
+                rand_indices = torch.nonzero(rand_row, as_tuple=False).view(-1).tolist()
+                random_predicted_filtered.append([bi_gram_dict[idx] for idx in rand_indices])
             bs = data.size(0)
             dice, precision, recall, f1 = calculate_performance_metrics(actual_bi_grams, predicted_filtered)
             total_dice += dice
@@ -494,7 +523,11 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
             num_samples += bs
 
             # Update per-bigram counts (use sets to avoid double-counting within a record)
-            for actual_set, predicted_set in zip(map(set, actual_bi_grams), map(set, predicted_filtered)):
+            for actual_set, predicted_set, rand_pred_set in zip(
+                map(set, actual_bi_grams),
+                map(set, predicted_filtered),
+                map(set, random_predicted_filtered)
+            ):
                 for gram in actual_set:
                     idx = bi_gram_to_idx.get(gram)
                     if idx is not None:
@@ -507,6 +540,14 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
                     idx = bi_gram_to_idx.get(gram)
                     if idx is not None:
                         tp_counts[idx] += 1
+                for gram in rand_pred_set:
+                    idx = bi_gram_to_idx.get(gram)
+                    if idx is not None:
+                        rand_pred_counts[idx] += 1
+                for gram in actual_set & rand_pred_set:
+                    idx = bi_gram_to_idx.get(gram)
+                    if idx is not None:
+                        rand_tp_counts[idx] += 1
 
             for uid, actual, predicted in zip(uids, actual_bi_grams, predicted_filtered):
                 metrics = metrics_per_entry(actual, predicted)
@@ -525,28 +566,20 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     avg_recall = total_recall / num_samples
     avg_f1 = total_f1 / num_samples
 
-    # --- Per-bigram precision / recall / F1 and dataset frequency ---
-    df_all_records = load_dataframe(path_all)
-    dataset_occurrence_counts = [0] * num_bi_grams  # number of records containing each bi-gram
-    for _, row in df_all_records.iterrows():
-        # Drop encoding + uid (last two columns) to mirror training label construction
-        record_string = "".join(row.iloc[:-2].astype(str))
-        grams_in_record = set(extract_bi_grams(record_string))
-        for gram in grams_in_record:
-            idx = bi_gram_to_idx.get(gram)
-            if idx is not None:
-                dataset_occurrence_counts[idx] += 1
-    dataset_total_records = len(df_all_records)
-
     per_bigram_rows = []
     for gram in all_bi_grams:
         idx = bi_gram_to_idx[gram]
         tp = tp_counts[idx]
         pred = pred_counts[idx]
         true = true_counts[idx]
+        rand_tp = rand_tp_counts[idx]
+        rand_pred = rand_pred_counts[idx]
         precision_bg = tp / pred if pred else 0.0
         recall_bg = tp / true if true else 0.0
         f1_bg = 2 * precision_bg * recall_bg / (precision_bg + recall_bg) if (precision_bg + recall_bg) else 0.0
+        rand_precision_bg = rand_tp / rand_pred if rand_pred else 0.0
+        rand_recall_bg = rand_tp / true if true else 0.0
+        rand_f1_bg = 2 * rand_precision_bg * rand_recall_bg / (rand_precision_bg + rand_recall_bg) if (rand_precision_bg + rand_recall_bg) else 0.0
         dataset_pct = dataset_occurrence_counts[idx] / dataset_total_records if dataset_total_records else 0.0
         per_bigram_rows.append({
             "bigram": gram,
@@ -556,7 +589,12 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
             "tp": tp,
             "pred_count": pred,
             "true_count": true,
-            "dataset_pct": dataset_pct
+            "dataset_pct": dataset_pct,
+            "rand_precision": rand_precision_bg,
+            "rand_recall": rand_recall_bg,
+            "rand_f1": rand_f1_bg,
+            "rand_tp": rand_tp,
+            "rand_pred_count": rand_pred
         })
 
     per_bigram_df = pd.DataFrame(per_bigram_rows)

@@ -8,8 +8,7 @@ class RoundBasedEncodingSchemeDataset(Dataset):
         self.isLabeled = is_labeled
         self.allTwoGrams = all_bi_grams
         self.devMode = dev_mode
-
-        # Encoded vectors are 1296-bit strings; convert each to a float tensor.
+        
         self.bitStringTensors = data["encoded_vector"].apply(
             lambda row: bit_string_to_tensor(list(str(row)))
         )
