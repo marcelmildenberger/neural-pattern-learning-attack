@@ -166,7 +166,7 @@ def map_probabilities_to_bi_grams(bi_gram_dict, probabilities):
 
 
 
-def filter_high_scoring_bi_grams(bi_gram_scores, threshold, max_grams=1036):
+def filter_high_scoring_bi_grams(bi_gram_scores, threshold, max_grams=33):
     filtered = []
     for score_dict in bi_gram_scores:
         # Filter by threshold
