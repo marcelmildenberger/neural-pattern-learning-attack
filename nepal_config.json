@@ -1,6 +1,7 @@
 {
     "GLOBAL_CONFIG": {
         "Data": "./data/datasets/fakename_5k.tsv",
+        "AnalysisData": "./data/datasets/fakename_uniform_saul_encoded.tsv",
         "Overlap": 0.8,
         "DropFrom": "Eve",
         "Verbose": false,

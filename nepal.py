@@ -135,6 +135,8 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
 
     # Load the experiment datasets (train, val, test) and check for empty splits.
     # If any split is empty, write a termination log and exit early to prevent downstream errors.
+    analysis_data_path = GLOBAL_CONFIG.get("AnalysisData")
+
     datasets = load_experiment_datasets(data_dir, alice_enc_hash, identifier, ENC_CONFIG, NEPAL_CONFIG, GLOBAL_CONFIG, all_bi_grams, splits=("train", "val", "test"))
     data_train, data_val, data_test = datasets["train"], datasets["val"], datasets["test"]
     if len(data_train) == 0 or len(data_val) == 0 or len(data_test) == 0:
@@ -294,6 +296,26 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         pin_memory=True,
         num_workers=GLOBAL_CONFIG["Workers"] // 15 if GLOBAL_CONFIG["UseGPU"] else 0,
     )
+
+    # Optionally override the evaluation dataset with a dedicated analysis dataset.
+    analysis_df = None
+    if analysis_data_path:
+        if ENC_CONFIG["AliceAlgo"] != "Saul":
+            raise ValueError("AnalysisData override currently supports Saul encoding only.")
+        analysis_df = pd.read_csv(analysis_data_path, sep="\t")
+        analysis_dataset = RoundBasedEncodingSchemeDataset(
+            analysis_df,
+            is_labeled=True,
+            all_bi_grams=all_bi_grams,
+            dev_mode=GLOBAL_CONFIG["DevMode"],
+        )
+        dataloader_test = DataLoader(
+            analysis_dataset,
+            batch_size=int(best_config.get("batch_size", 32)),
+            shuffle=False,
+            pin_memory=True,
+            num_workers=GLOBAL_CONFIG["Workers"] // 15 if GLOBAL_CONFIG["UseGPU"] else 0,
+        )
 
     # Respect the user's GPU toggle; fall back to CPU even if CUDA is available when UseGPU is False
     device = torch.device("cuda:0" if use_gpu and torch.cuda.is_available() else "cpu")
@@ -474,7 +496,7 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     num_bi_grams = len(all_bi_grams)
 
     # --- Dataset-level bigram frequencies (used as prior for random guesser baseline) ---
-    df_all_records = load_dataframe(path_all)
+    df_all_records = analysis_df if analysis_df is not None else load_dataframe(path_all)
     dataset_occurrence_counts = [0] * num_bi_grams  # number of records containing each bi-gram
     for _, row in df_all_records.iterrows():
         # Drop encoding + uid (last two columns) to mirror training label construction
@@ -653,11 +675,15 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     if GLOBAL_CONFIG["BenchMode"]:
         start_refinement_and_reconstruction = time.time()
 
-    header = read_header(GLOBAL_CONFIG["Data"])
-    
-    df_not_reid_cached = get_not_reidentified_df(data_dir, identifier, alice_enc_hash=alice_enc_hash)
+    if analysis_data_path:
+        if GLOBAL_CONFIG.get("Verbose", False):
+            print("Skipping re-identification because AnalysisData may not share UIDs with the training splits.")
+    else:
+        header = read_header(GLOBAL_CONFIG["Data"])
+        
+        df_not_reid_cached = get_not_reidentified_df(data_dir, identifier, alice_enc_hash=alice_enc_hash)
 
-    run_reidentification_greedy(results, header, df_not_reid_cached, current_experiment_directory=current_experiment_directory)
+        run_reidentification_greedy(results, header, df_not_reid_cached, current_experiment_directory=current_experiment_directory)
 
     # Stop timing the refinement and reconstruction.
     if GLOBAL_CONFIG["BenchMode"] and start_total is not None:
