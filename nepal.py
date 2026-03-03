@@ -496,7 +496,10 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     num_bi_grams = len(all_bi_grams)
 
     # --- Dataset-level bigram frequencies (used as prior for random guesser baseline) ---
-    df_all_records = analysis_df if analysis_df is not None else load_dataframe(path_all)
+    # Random baseline should reflect the distribution seen during training/validation,
+    # so always compute bigram prevalence from the training dataset (path_all),
+    # even if evaluation is run on a separate analysis dataset.
+    df_all_records = load_dataframe(path_all)
     dataset_occurrence_counts = [0] * num_bi_grams  # number of records containing each bi-gram
     for _, row in df_all_records.iterrows():
         # Drop encoding + uid (last two columns) to mirror training label construction
