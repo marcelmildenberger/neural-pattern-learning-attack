@@ -13,6 +13,8 @@ import csv
 from pathlib import Path
 from typing import Iterable, List, Sequence
 
+import numpy as np
+
 from graphMatching.encoders.bf_encoder import BFEncoder
 from graphMatching.encoders.tmh_encoder import TMHEncoder
 from graphMatching.encoders.tsh_encoder import TSHEncoder
@@ -66,7 +68,16 @@ def encode_with_bf(data: List[List[str]], uids: List[str], args: argparse.Namesp
         bf_t,
         workers=args.jobs,
     )
-    _, combined = encoder.encode_and_compare_and_append(data, uids, metric="dice", sim=True, store_encs=False)
+
+    if args.skip_pairs:
+        # Skip pairwise similarity computation to avoid huge memory use on large datasets.
+        data_joined = [["".join(d).lower()] for d in data]
+        enc = encoder.encode(data_joined)
+        enc_as_string = ["".join(map(str, bits.astype(int))) for bits in enc]
+        combined = np.column_stack((data, enc_as_string, uids))
+    else:
+        _, combined = encoder.encode_and_compare_and_append(data, uids, metric="dice", sim=True, store_encs=False)
+
     return combined
 
 
@@ -81,7 +92,14 @@ def encode_with_tmh(data: List[List[str]], uids: List[str], args: argparse.Names
         verbose=args.verbose,
         workers=args.jobs,
     )
-    _, combined = encoder.encode_and_compare_and_append(data, uids, metric="dice", sim=True, store_encs=False)
+
+    if args.skip_pairs:
+        enc = encoder.encode(data)
+        enc_as_string = ["".join(map(str, bits.astype(int))) for bits in enc]
+        combined = np.column_stack((data, enc_as_string, uids))
+    else:
+        _, combined = encoder.encode_and_compare_and_append(data, uids, metric="dice", sim=True, store_encs=False)
+
     return combined
 
 
@@ -95,7 +113,13 @@ def encode_with_tsh(data: List[List[str]], uids: List[str], args: argparse.Names
         verbose=args.verbose,
         workers=args.jobs,
     )
-    _, combined = encoder.encode_and_compare_and_append(data, uids, metric="dice", sim=True, store_encs=False)
+
+    if args.skip_pairs:
+        encodings = encoder.encode(data)
+        combined = np.column_stack((data, encodings, uids))
+    else:
+        _, combined = encoder.encode_and_compare_and_append(data, uids, metric="dice", sim=True, store_encs=False)
+
     return combined
 
 
@@ -124,6 +148,7 @@ def main() -> None:
     parser.add_argument("--tsh-num-hash-func", type=int, default=DEFAULT_TSH_NUM_HASH_FUNC)
     parser.add_argument("--tsh-num-hash-col", type=int, default=DEFAULT_TSH_NUM_HASH_COL)
     parser.add_argument("--tsh-rand-mode", choices=["PNG", "SHA"], default=DEFAULT_TSH_RAND_MODE)
+    parser.add_argument("--skip-pairs", action="store_true", help="Skip pairwise similarity calculations to reduce memory and avoid OpenMP crashes.")
     args = parser.parse_args()
 
     datasets = list(iter_plain_datasets(args.source_dir, args.recursive))

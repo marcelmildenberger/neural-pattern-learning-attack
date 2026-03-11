@@ -4,6 +4,7 @@ import os
 import time
 from datetime import datetime
 from functools import partial
+import logging
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -23,10 +24,13 @@ from ray.tune import RunConfig
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
 
-def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG):
+def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG, logger: logging.Logger | None = None):
     """
     Main experiment entry point for running NEPAL
     """
+    logger = logger or logging.getLogger("nepal")
+    if not logger.handlers:
+        logger.addHandler(logging.NullHandler())
     # Ignore optuna warnings.
     warnings.filterwarnings("ignore", category=UserWarning, module="optuna")
     # Set default values for alignment and global configuration.
@@ -34,11 +38,32 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     # GLOBAL_CONFIG["Workers"] is set to the number of available CPU cores
     ALIGN_CONFIG["RegWS"] = max(0.1, GLOBAL_CONFIG["Overlap"] / 3)
     GLOBAL_CONFIG["Workers"] = max_cpu_cores = os.cpu_count()
+
+    if logger.isEnabledFor(logging.INFO):
+        logger.info(
+            "Starting NEPAL run | dataset=%s | alice_algo=%s | graph_matching=%s | bench_mode=%s | use_gpu=%s",
+            GLOBAL_CONFIG.get("Data"),
+            ENC_CONFIG.get("AliceAlgo"),
+            GLOBAL_CONFIG.get("GraphMatchingAttack"),
+            GLOBAL_CONFIG.get("BenchMode"),
+            GLOBAL_CONFIG.get("UseGPU"),
+        )
+        logger.info(
+            "Derived params: RegWS=%.3f | Workers=%s | ParallelTrials=%s",
+            ALIGN_CONFIG["RegWS"],
+            GLOBAL_CONFIG["Workers"],
+            NEPAL_CONFIG.get("ParallelTrials"),
+        )
     
     # Validate and set parallel trials configuration
     parallel_trials = NEPAL_CONFIG["ParallelTrials"]
     if parallel_trials > max_cpu_cores:
-        print(f"[WARNING] ParallelTrials ({parallel_trials}) exceeds available CPU cores ({max_cpu_cores}). Setting to {max_cpu_cores}.")
+        logger.warning(
+            "ParallelTrials (%s) exceeds available CPU cores (%s). Setting to %s.",
+            parallel_trials,
+            max_cpu_cores,
+            max_cpu_cores,
+        )
         parallel_trials = max_cpu_cores
         NEPAL_CONFIG["ParallelTrials"] = parallel_trials
     
@@ -50,10 +75,10 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         # Auto-detect and use maximum available GPUs when UseGPU is True
         gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
         if gpu_count == 0:
-            print("[WARNING] UseGPU is True but no GPUs available. Disabling GPU usage.")
+            logger.warning("UseGPU is True but no GPUs available. Disabling GPU usage.")
             GLOBAL_CONFIG["UseGPU"] = use_gpu = False
         else:
-            print(f"[INFO] Using {gpu_count} available GPU(s)")
+            logger.info("Using %s available GPU(s)", gpu_count)
 
     
 
@@ -64,6 +89,8 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     experiment_tag = "experiment_" + ENC_CONFIG["AliceAlgo"] + "_" + selected_dataset + "_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     current_experiment_directory = f"experiment_results/{experiment_tag}"
     os.makedirs(current_experiment_directory, exist_ok=True)
+    if logger.isEnabledFor(logging.INFO):
+        logger.info("Results directory: %s", current_experiment_directory)
 
     all_configs = {
         "GLOBAL_CONFIG": GLOBAL_CONFIG,
@@ -118,17 +145,26 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
 
     # Check if Data is Available or Needs to be Generated
     if not(os.path.isfile(path_reidentified) and os.path.isfile(path_not_reidentified) and os.path.isfile(path_all)):
+        if logger.isEnabledFor(logging.INFO):
+            logger.info("Derived identifier %s not cached; generating data artifacts.", identifier)
         if GLOBAL_CONFIG["GraphMatchingAttack"]:
+            if logger.isEnabledFor(logging.INFO):
+                logger.info("Running Graph Matching Attack preprocessing.")
             run_gma(
                 GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG,
                 eve_enc_hash, alice_enc_hash, eve_emb_hash, alice_emb_hash
             )
         # When GraphMatchingAttack is disabled, create synthetic data splits based on overlap
         else:
+            if logger.isEnabledFor(logging.INFO):
+                logger.info("GraphMatchingAttack disabled; creating synthetic data splits.")
             create_synthetic_data_splits(
                 GLOBAL_CONFIG, ENC_CONFIG, data_dir, alice_enc_hash, identifier, 
                 path_reidentified, path_not_reidentified, path_all
             )
+    else:
+        if logger.isEnabledFor(logging.INFO):
+            logger.info("Reusing cached data artifacts for identifier %s", identifier)
 
     if GLOBAL_CONFIG["BenchMode"] and GLOBAL_CONFIG["GraphMatchingAttack"] and start_gma is not None:
         elapsed_gma = time.time() - start_gma
@@ -161,8 +197,8 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
                 output_dir=current_experiment_directory
             )
 
-        if GLOBAL_CONFIG.get("Verbose", False):
-            print("[INFO] Terminating run because one or more dataset splits are empty.")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info("Terminating run because one or more dataset splits are empty.")
         return 1
     # Start timing the hyperparameter optimization run.
     if GLOBAL_CONFIG["BenchMode"]:
@@ -189,6 +225,14 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         ]),
         "batch_size": tune.choice([8, 16, 32, 64]),
     }
+
+    if logger.isEnabledFor(logging.INFO):
+        logger.info(
+            "Starting hyperparameter search: samples=%s | metric=%s | early_stop=%.2f",
+            NEPAL_CONFIG["NumSamples"],
+            NEPAL_CONFIG["MetricToOptimize"],
+            NEPAL_CONFIG.get("EarlyStopThreshold", 0.99),
+        )
 
     # Initialize Ray for hyperparameter optimization.
     ray.init(
@@ -265,6 +309,14 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     if GLOBAL_CONFIG["SaveResults"]:
         print_and_save_result("best_result", best_result, hyperparameter_optimization_directory)
 
+    best_metric_value = None
+    try:
+        best_metric_value = best_result.metrics.get(NEPAL_CONFIG["MetricToOptimize"])
+    except Exception:
+        best_metric_value = None
+    if logger.isEnabledFor(logging.INFO):
+        logger.info("Best trial %s = %s", NEPAL_CONFIG["MetricToOptimize"], best_metric_value)
+
     best_config = resolve_config(best_result.config)
 
     # Start timing the model training.
@@ -296,6 +348,15 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         pin_memory=True,
         num_workers=GLOBAL_CONFIG["Workers"] // 15 if GLOBAL_CONFIG["UseGPU"] else 0,
     )
+
+    if logger.isEnabledFor(logging.INFO):
+        logger.info(
+            "Data prepared | train=%d | val=%d | test=%d | batch_size=%d",
+            len(data_train),
+            len(data_val),
+            len(data_test),
+            int(best_config.get("batch_size", 32)),
+        )
 
     # Optionally override the evaluation dataset with a dedicated analysis dataset.
     analysis_df = None
@@ -437,14 +498,16 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
 
             log_epoch_metrics(epoch, num_epochs, train_loss, val_loss, tb_writer=tb_writer if 'tb_writer' in locals() else None, save_results=GLOBAL_CONFIG["SaveResults"])
             if early_stopper(val_loss):
-                if verbose:
-                    print(f"Early stopping triggered at epoch {epoch + 1}")
+                if logger.isEnabledFor(logging.INFO):
+                    logger.info("Early stopping triggered at epoch %d", epoch + 1)
                 break
         if best_model_state is not None:
             model.load_state_dict(best_model_state)
         return model, train_losses, val_losses
 
     # Train the final model.
+    if logger.isEnabledFor(logging.INFO):
+        logger.info("Training final model for up to %s epochs", best_config.get("epochs", NEPAL_CONFIG["Epochs"]))
     model, train_losses, val_losses = train_final_model(
         model, dataloader_train, dataloader_val,
         criterion, optimizer, device,
@@ -604,6 +667,15 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     rand_avg_recall = rand_total_recall / num_samples
     rand_avg_f1 = rand_total_f1 / num_samples
 
+    if logger.isEnabledFor(logging.INFO):
+        logger.info(
+            "Evaluation complete | avg_dice=%.4f | precision=%.4f | recall=%.4f | f1=%.4f",
+            avg_dice,
+            avg_precision,
+            avg_recall,
+            avg_f1,
+        )
+
     per_bigram_rows = []
     for gram in all_bi_grams:
         idx = bi_gram_to_idx[gram]
@@ -658,11 +730,17 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
             ]
         }
         metrics_df = pd.DataFrame(metrics_data)
-        metrics_df.to_csv(f"{trained_model_directory}/metrics.csv", index=False)
+        metrics_path = f"{trained_model_directory}/metrics.csv"
+        metrics_df.to_csv(metrics_path, index=False)
+        if logger.isEnabledFor(logging.INFO):
+            logger.info("Saved metrics to %s", metrics_path)
 
     if GLOBAL_CONFIG["SavePredictions"]:
-        with open(f"{trained_model_directory}/results.json", 'w', encoding='utf-8') as f:
+        results_path = f"{trained_model_directory}/results.json"
+        with open(results_path, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=4, ensure_ascii=False)
+        if logger.isEnabledFor(logging.INFO):
+            logger.info("Saved predictions to %s", results_path)
 
     # Normalize the results.
     results_df = pd.json_normalize(results)
@@ -679,8 +757,8 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         start_refinement_and_reconstruction = time.time()
 
     if analysis_data_path:
-        if GLOBAL_CONFIG.get("Verbose", False):
-            print("Skipping re-identification because AnalysisData may not share UIDs with the training splits.")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info("Skipping re-identification because AnalysisData may not share UIDs with the training splits.")
     else:
         header = read_header(GLOBAL_CONFIG["Data"])
         
@@ -703,4 +781,6 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
             output_dir=current_experiment_directory
         )
 
+    if logger.isEnabledFor(logging.INFO):
+        logger.info("NEPAL run finished successfully.")
     return 0

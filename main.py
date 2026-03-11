@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import argparse
+import logging
 from typing import Dict, Any
 import traceback
 from nepal import run_nepal
@@ -29,7 +30,23 @@ def load_config(config_path: str = "nepal_config.json") -> Dict[str, Any]:
         config = json.load(f)
     
     return config
-    
+
+
+def configure_logging(verbose: bool) -> logging.Logger:
+    """
+    Configure a simple console logger. INFO logs appear only when verbose is True;
+    otherwise, only errors are emitted.
+    """
+    level = logging.INFO if verbose else logging.ERROR
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+    )
+    logger = logging.getLogger("nepal")
+    logger.setLevel(level)
+    return logger
 
 
 def main():
@@ -66,11 +83,13 @@ def main():
     )
     
     args = parser.parse_args()
+
+    logger = configure_logging(args.verbose)
     
     try:
         # Load configuration
         if args.verbose:
-            print(f"[INFO] Loading configuration from: {args.config}")
+            logger.info("Loading configuration from: %s", args.config)
         
         config = load_config(args.config)
         
@@ -86,32 +105,32 @@ def main():
             GLOBAL_CONFIG["Verbose"] = True
         
         if args.verbose:
-            print(f"[INFO] GMA enabled: {GLOBAL_CONFIG['GraphMatchingAttack']}")
-            print(f"[INFO] Parallel Trials: {NEPAL_CONFIG.get('ParallelTrials', 0)}")
-            print(f"[INFO] GPU Usage: {GLOBAL_CONFIG.get('UseGPU', False)}")
-            print(f"[INFO] GPU Count: {GLOBAL_CONFIG.get('GPUCount', 0)}")
-            print(f"[INFO] Dataset: {GLOBAL_CONFIG.get('Data', 'Not specified')}")
-            print(f"[INFO] Encoding Algorithm: {ENC_CONFIG.get('AliceAlgo', 'Not specified')}")
+            logger.info("GMA enabled: %s", GLOBAL_CONFIG["GraphMatchingAttack"])
+            logger.info("Parallel Trials: %s", NEPAL_CONFIG.get("ParallelTrials", 0))
+            logger.info("GPU Usage: %s", GLOBAL_CONFIG.get("UseGPU", False))
+            logger.info("GPU Count: %s", GLOBAL_CONFIG.get("GPUCount", 0))
+            logger.info("Dataset: %s", GLOBAL_CONFIG.get("Data", "Not specified"))
+            logger.info("Encoding Algorithm: %s", ENC_CONFIG.get("AliceAlgo", "Not specified"))
         
         # Run the experiment
-        exit_code = run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
+        exit_code = run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG, logger=logger)
         
         
         if args.verbose:
-            print(f"[INFO] Experiment completed with exit code: {exit_code}")
+            logger.info("Experiment completed with exit code: %s", exit_code)
         
         return exit_code
         
     except FileNotFoundError as e:
-        print(f"[ERROR] {e}")
+        logger.error("%s", e)
         traceback.print_exception(type(e), e, e.__traceback__)
         return 1
     except KeyError as e:
-        print(f"[ERROR] Missing required configuration section: {e}")
+        logger.error("Missing required configuration section: %s", e)
         traceback.print_exception(type(e), e, e.__traceback__)
         return 1
     except Exception as e:
-        print(f"[ERROR] Unexpected error: {e}")
+        logger.error("Unexpected error: %s", e)
         traceback.print_exception(type(e), e, e.__traceback__)
         return 1
 
