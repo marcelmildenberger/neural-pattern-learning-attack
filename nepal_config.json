@@ -11,7 +11,7 @@
         "SaveEveEncs": false,
         "DevMode": false,
         "BenchMode": true,
-        "SaveResults": false,
+        "SaveResults": true,
         "UseGPU": true,
         "SaveModel": false,
         "SavePredictions": true,
