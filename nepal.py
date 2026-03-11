@@ -11,7 +11,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from tqdm.notebook import tqdm
 import warnings
 from utils.hyperparameter_training import hyperparameter_training
 from utils.early_stopping import EarlyStopping
@@ -581,7 +580,7 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG,
     random_predict_probs = torch.tensor(dataset_probabilities, device=device)
 
     model.eval()
-    dataloader_iter = tqdm(dataloader_test, desc="Test loop") if GLOBAL_CONFIG["Verbose"] else dataloader_test
+    dataloader_iter = dataloader_test
     pred_counts = [0] * num_bi_grams  # how often each bi-gram was predicted
     true_counts = [0] * num_bi_grams  # how often each bi-gram appears in ground truth
     tp_counts = [0] * num_bi_grams    # true positives per bi-gram
