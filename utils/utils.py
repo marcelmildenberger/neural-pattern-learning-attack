@@ -132,7 +132,7 @@ def run_epoch(model, dataloader, criterion, optimizer, device, is_training, verb
     model.train(mode=is_training)
     running_loss = 0.0
 
-    data_iter = tqdm(dataloader, desc="Training" if is_training else "Validation") if verbose else dataloader
+    data_iter = dataloader
 
     with torch.set_grad_enabled(is_training):
         for data, labels, _ in data_iter:
