@@ -2,7 +2,7 @@
     "GLOBAL_CONFIG": {
         "Data": "./data/datasets/fakename_5k.tsv",
         "AnalysisData": null,
-        "Overlap": 0.79,
+        "Overlap": 0.78,
         "DropFrom": "Eve",
         "Verbose": true,
         "MatchingMetric": "cosine",

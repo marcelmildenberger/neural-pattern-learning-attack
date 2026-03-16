@@ -89,7 +89,7 @@ def load_rse_encoder_module():
 
 
 def normalize_rse_value(value: str) -> str:
-    return str(value).strip().lower().replace(" ", "")
+    return str(value).strip().lower().replace(" ", "").replace("/", "")
 
 
 def extract_rse_q_grams(value: str, q: int) -> set[str]:
