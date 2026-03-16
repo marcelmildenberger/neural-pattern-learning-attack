@@ -294,8 +294,8 @@ def main() -> None:
                         help="CSV file with q-gram frequencies for the RSE encoder. Defaults to deriving frequencies from each dataset.")
     parser.add_argument("--rse-k", type=int, default=None,
                         help="RSE parameter k: number of reference sets in which each q-gram must occur.")
-    parser.add_argument("--rse-swap-ref-sets", action="store_true",
-                        help="Enable the RSE frequency-based swapping step for reference sets.")
+    parser.add_argument("--rse-swap-ref-sets", action=argparse.BooleanOptionalAction, default=True,
+                        help="Enable the RSE frequency-based swapping step for reference sets (default: enabled).")
     parser.add_argument("--skip-pairs", action="store_true", help="Skip pairwise similarity calculations to reduce memory and avoid OpenMP crashes.")
     args = parser.parse_args()
 
