@@ -54,11 +54,11 @@ ___
 
 | Parameter Name | Description                                                                                                        | Default                     |
 |----------------|--------------------------------------------------------------------------------------------------------------------|-----------------------------|
-| AliceAlgo      | Algorithm used for encoding Alice's data. One of "BloomFilter", "TabMinHash", "TwoStepHash" or None (No Encoding). | "TwoStepHash"               |
+| AliceAlgo      | Algorithm used for encoding Alice's data. One of "BloomFilter", "TabMinHash", "TwoStepHash", "RSE" or None (No Encoding). RSE currently requires a pre-encoded `*_rse_encoded.tsv` dataset and synthetic splits (`GraphMatchingAttack = False`). | "TwoStepHash"               |
 | AliceSecret    | Secret (seed for hash function selection/salt) used when encoding Alice's data. Can be String or Integer.          | "SuperSecretSalt1337"       |
 | AliceN         | Size of N-grams used for encoding Alice's data.                                                                    | 2                           |
 | AliceMetric    | Similarity metric to be computed during similarity graph generation on Alice's data.                               | "dice"                      |
-| EveAlgo        | Algorithm used for encoding Eve's data. One of "BloomFilter", "TabMinHash", "TwoStepHash" or None (No Encoding).   | None                        |
+| EveAlgo        | Algorithm used for encoding Eve's data. One of "BloomFilter", "TabMinHash", "TwoStepHash", "RSE" or None (No Encoding). RSE is not currently supported in the graph matching stage.   | None                        |
 | EveSecret      | Secret (seed for hash function selection/salt) used when encoding Eve's data. Can be String or Integer.            | "ATotallyDifferentString42" |
 | EveN           | Size of N-grams used for encoding Eve's data.                                                                      | 2                           |
 | EveMetric      | Similarity metric to be computed during similarity graph generation on Eve's data.                                 | "dice"                      |
@@ -163,4 +163,3 @@ ___
 | Wasserstein    | If True, uses unsupervised Wasserstein Procrustes; otherwise uses supervised closed-form Procrustes.             | True                |
 
 ___
-

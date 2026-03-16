@@ -1,3 +1,6 @@
 [submodule "graphMatchingMarcel"]
 	path = graphMatching
 	url = https://github.com/marcelmildenberger/graphMatching.git
+[submodule "rse-for-pprl"]
+	path = rse-for-pprl
+	url = https://github.com/SumayyaZiyad/rse-for-pprl

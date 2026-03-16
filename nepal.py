@@ -53,6 +53,15 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG,
             GLOBAL_CONFIG["Workers"],
             NEPAL_CONFIG.get("ParallelTrials"),
         )
+
+    unsupported_gma_encodings = {"RSE", "Saul", "RoundBasedEncoder"}
+    if GLOBAL_CONFIG["GraphMatchingAttack"] and (
+        ENC_CONFIG.get("AliceAlgo") in unsupported_gma_encodings
+        or ENC_CONFIG.get("EveAlgo") in unsupported_gma_encodings
+    ):
+        raise ValueError(
+            "RSE-style encodings are currently supported only with synthetic splits. Set 'GraphMatchingAttack' to false."
+        )
     
     # Validate and set parallel trials configuration
     parallel_trials = NEPAL_CONFIG["ParallelTrials"]
@@ -360,8 +369,8 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG,
     # Optionally override the evaluation dataset with a dedicated analysis dataset.
     analysis_df = None
     if analysis_data_path:
-        if ENC_CONFIG["AliceAlgo"] != "Saul":
-            raise ValueError("AnalysisData override currently supports Saul encoding only.")
+        if ENC_CONFIG["AliceAlgo"] not in {"Saul", "RSE", "RoundBasedEncoder"}:
+            raise ValueError("AnalysisData override currently supports encoded_vector-style datasets only (Saul/RSE).")
         analysis_df = pd.read_csv(analysis_data_path, sep="\t")
         analysis_dataset = RoundBasedEncodingSchemeDataset(
             analysis_df,
