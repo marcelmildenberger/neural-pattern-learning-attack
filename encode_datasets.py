@@ -89,7 +89,8 @@ def load_rse_encoder_module():
 
 
 def normalize_rse_value(value: str) -> str:
-    return str(value).strip().lower().replace(" ", "").replace("/", "")
+    normalized = str(value).strip().lower()
+    return "".join(ch for ch in normalized if ch.isalnum())
 
 
 def extract_rse_q_grams(value: str, q: int) -> set[str]:
@@ -227,6 +228,10 @@ def encode_with_rse(data: List[List[str]], uids: List[str], args: argparse.Names
             write_rse_q_gram_frequencies(q_gram_counter, q_gram_frequency_file)
             print(f"- Derived RSE q-gram frequencies from dataset: {q_gram_frequency_file}")
 
+        print("Q-Gram Frequency File Sample:")
+        with open(q_gram_frequency_file, 'r') as f:
+            for _ in range(5):
+                print(f"  {next(f).strip()}")
         reference_q_gram_sets = rse.ref_set_processor.RefSetProcessor(
             str(args.rse_init_ref_set_file),
             str(q_gram_frequency_file),
