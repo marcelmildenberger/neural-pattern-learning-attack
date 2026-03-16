@@ -4,3 +4,6 @@
 [submodule "rse-for-pprl"]
 	path = rse-for-pprl
 	url = https://github.com/SumayyaZiyad/rse-for-pprl
+[submodule "vah-for-pprl"]
+	path = vah-for-pprl
+	url = https://github.com/SumayyaZiyad/vah-for-pprl.git

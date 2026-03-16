@@ -9,6 +9,7 @@ python encode_datasets.py --source-dir data/datasets --recursive
 """
 
 import argparse
+import copy
 import csv
 import importlib.util
 import itertools
@@ -124,6 +125,22 @@ def load_rse_ref_set_generator_module():
     return module
 
 
+@lru_cache(maxsize=1)
+def load_vah_hardening_module():
+    vah_dir = Path(__file__).resolve().parent / "vah-for-pprl"
+    module_path = vah_dir / "hardening.py"
+    if not module_path.is_file():
+        raise FileNotFoundError(f"VAH hardening module not found: {module_path}")
+
+    spec = importlib.util.spec_from_file_location("vah_hardening", module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load VAH hardening module from {module_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def normalize_rse_value(value: str) -> str:
     normalized = str(value).strip().lower()
     return "".join(ch for ch in normalized if ch.isalnum())
@@ -189,6 +206,13 @@ def count_rse_q_gram_frequencies(data: List[List[str]], q: int) -> Counter[str]:
             if str(value).strip() == "":
                 continue
             q_gram_counter.update(iter_rse_q_grams(value, q))
+    return q_gram_counter
+
+
+def count_record_store_q_grams(record_store: dict, q_gram_attr: str) -> Counter[str]:
+    q_gram_counter: Counter[str] = Counter()
+    for record in record_store.values():
+        q_gram_counter.update(record[q_gram_attr])
     return q_gram_counter
 
 
@@ -313,6 +337,82 @@ def print_csv_preview(path: Path, num_lines: int = 5) -> None:
             print(f"  {line.strip()}")
 
 
+def get_vah_vulnerable_q_grams(q_gram_counter: Counter[str], vuln_q_gram_count: int) -> tuple[List[str], List[str]]:
+    print(f"Identifying top {vuln_q_gram_count} frequent q-grams to harden via VAH")
+    sorted_q_grams = sorted(q_gram_counter.items(), key=lambda item: (item[1], item[0]))
+    vuln_q_grams = [key for key, _ in sorted_q_grams[-vuln_q_gram_count:]]
+    non_vuln_q_grams = [key for key, _ in sorted_q_grams[:-vuln_q_gram_count]] if vuln_q_gram_count < len(sorted_q_grams) else []
+    print(f"VAH vulnerable q-grams: {vuln_q_grams}")
+    print(f"VAH non-vulnerable q-gram pool size: {len(non_vuln_q_grams)}")
+    return vuln_q_grams, non_vuln_q_grams
+
+
+def harden_record_store_with_vah(
+    record_store: dict,
+    q_gram_attr: str,
+    vah_instance,
+    q_gram_counter: Counter[str],
+    dataset_label: str,
+) -> tuple[dict, Counter[str]]:
+    print(f"Applying VAH hardening to {dataset_label}")
+    data_dict = {uid: set(record[q_gram_attr]) for uid, record in record_store.items()}
+    hardened_data_dict = vah_instance.harden_with_vah_ref_sets(copy.deepcopy(data_dict), dict(q_gram_counter))
+    hardened_store = {uid: {q_gram_attr: hardened_data_dict[uid]} for uid in record_store.keys()}
+    hardened_counter = count_record_store_q_grams(hardened_store, q_gram_attr)
+    return hardened_store, hardened_counter
+
+
+def maybe_apply_vah_hardening(
+    primary_store: dict,
+    primary_counter: Counter[str],
+    aux_sample_store: dict,
+    aux_sample_counter: Counter[str],
+    aux_public_store: dict,
+    aux_public_counter: Counter[str],
+    args: argparse.Namespace,
+    q_gram_attr: str,
+) -> tuple[dict, Counter[str], dict, Counter[str]]:
+    if not args.rse_hardening:
+        return primary_store, primary_counter, aux_sample_store, aux_sample_counter
+
+    if args.rse_hardening_vuln_qgrams <= 0:
+        raise ValueError("--rse-hardening-vuln-qgrams must be positive when VAH hardening is enabled.")
+
+    vah_module = load_vah_hardening_module()
+    vuln_q_grams, non_vuln_q_grams = get_vah_vulnerable_q_grams(aux_public_counter, args.rse_hardening_vuln_qgrams)
+    if not vuln_q_grams:
+        raise ValueError("VAH hardening could not identify any vulnerable q-grams from the public auxiliary dataset.")
+    if not non_vuln_q_grams:
+        raise ValueError(
+            "VAH hardening requires at least one non-vulnerable public q-gram. Reduce --rse-hardening-vuln-qgrams."
+        )
+
+    vah_ref_set_length = args.rse_hardening_ref_set_length or args.rse_ref_set_length
+    if vah_ref_set_length <= 0:
+        raise ValueError("VAH hardening reference-set length must be positive.")
+
+    vah_instance = vah_module.VAH(args.secret, set(vuln_q_grams), non_vuln_q_grams, vah_ref_set_length)
+    pub_db_q_gram_sets = {uid: set(record[q_gram_attr]) for uid, record in aux_public_store.items()}
+    print("Generating VAH reference sets from the public auxiliary dataset")
+    vah_instance.generate_reference_sets(pub_db_q_gram_sets)
+
+    hardened_primary_store, hardened_primary_counter = harden_record_store_with_vah(
+        primary_store,
+        q_gram_attr,
+        vah_instance,
+        primary_counter,
+        "the primary dataset",
+    )
+    hardened_aux_store, hardened_aux_counter = harden_record_store_with_vah(
+        aux_sample_store,
+        q_gram_attr,
+        vah_instance,
+        aux_sample_counter,
+        "the sampled auxiliary dataset",
+    )
+    return hardened_primary_store, hardened_primary_counter, hardened_aux_store, hardened_aux_counter
+
+
 def encode_with_bf(data: List[List[str]], uids: List[str], args: argparse.Namespace, diffusion=False, bf_t=10):
     from graphMatching.encoders.bf_encoder import BFEncoder
 
@@ -387,7 +487,7 @@ def encode_with_tsh(data: List[List[str]], uids: List[str], args: argparse.Names
 
 def encode_with_rse(data: List[List[str]], uids: List[str], args: argparse.Namespace, ds_path: Path):
     rse = load_rse_encoder_module()
-    primary_store, primary_rows, primary_uids, _, primary_skipped = build_rse_record_store(
+    primary_store, primary_rows, primary_uids, primary_q_gram_counter, primary_skipped = build_rse_record_store(
         data,
         uids,
         args.ngram_size,
@@ -398,7 +498,7 @@ def encode_with_rse(data: List[List[str]], uids: List[str], args: argparse.Names
 
     aux_source_path = infer_rse_aux_source_dataset(ds_path, args)
     aux_source_data, aux_source_uids, _ = read_tsv(str(aux_source_path), skip_header=False)
-    aux_full_store, aux_full_rows, aux_full_uids, _, aux_skipped = build_rse_record_store(
+    aux_full_store, aux_full_rows, aux_full_uids, aux_full_q_gram_counter, aux_skipped = build_rse_record_store(
         aux_source_data,
         aux_source_uids,
         args.ngram_size,
@@ -412,6 +512,18 @@ def encode_with_rse(data: List[List[str]], uids: List[str], args: argparse.Names
         seed=f"{args.secret}:{ds_path}:{aux_source_path}",
     )
     aux_sample_store = {uid: aux_full_store[uid] for uid in sampled_aux_uids}
+    aux_sample_q_gram_counter = count_record_store_q_grams(aux_sample_store, rse.Q_GRAM_ATTR)
+
+    primary_store, primary_q_gram_counter, aux_sample_store, aux_sample_q_gram_counter = maybe_apply_vah_hardening(
+        primary_store,
+        primary_q_gram_counter,
+        aux_sample_store,
+        aux_sample_q_gram_counter,
+        aux_full_store,
+        aux_full_q_gram_counter,
+        args,
+        rse.Q_GRAM_ATTR,
+    )
 
     ref_set_file, q_gram_frequency_file = resolve_rse_artifact_paths(ds_path, aux_source_path, args)
     q_gram_counter = count_rse_q_gram_frequencies(aux_source_data, args.ngram_size)
@@ -500,6 +612,12 @@ def main() -> None:
                         help="Public/auxiliary TSV dataset used to derive q-gram frequencies and sample the second dataset. Defaults to fakename_50k.tsv when available.")
     parser.add_argument("--rse-swap-ref-sets", action=argparse.BooleanOptionalAction, default=True,
                         help="Enable the RSE frequency-based swapping step for reference sets (default: enabled).")
+    parser.add_argument("--rse-hardening", action=argparse.BooleanOptionalAction, default=False,
+                        help="Enable optional VAH hardening on the RSE q-gram sets before encoding.")
+    parser.add_argument("--rse-hardening-vuln-qgrams", type=int, default=10,
+                        help="Number of top frequent public q-grams to harden when --rse-hardening is enabled.")
+    parser.add_argument("--rse-hardening-ref-set-length", type=int, default=None,
+                        help="Reference-set length for VAH hardening. Defaults to --rse-ref-set-length when omitted.")
     parser.add_argument("--skip-pairs", action="store_true", help="Skip pairwise similarity calculations to reduce memory and avoid OpenMP crashes.")
     args = parser.parse_args()
 
@@ -510,6 +628,10 @@ def main() -> None:
             parser.error("--rse-ref-set-length must be a positive integer when '--encoders rse' is selected.")
         if args.rse_aux_source_dataset is not None and not args.rse_aux_source_dataset.is_file():
             parser.error(f"RSE auxiliary source dataset not found: {args.rse_aux_source_dataset}")
+        if args.rse_hardening_vuln_qgrams <= 0:
+            parser.error("--rse-hardening-vuln-qgrams must be a positive integer.")
+        if args.rse_hardening_ref_set_length is not None and args.rse_hardening_ref_set_length <= 0:
+            parser.error("--rse-hardening-ref-set-length must be a positive integer when provided.")
 
     datasets = list(iter_plain_datasets(args.source_dir, args.recursive))
     if not datasets:
