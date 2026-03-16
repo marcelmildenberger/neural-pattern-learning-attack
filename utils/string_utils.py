@@ -1,22 +1,21 @@
 import string
 
 
+def normalize_alphanumeric(input_string):
+    return "".join(ch for ch in str(input_string).strip().lower() if ch.isalnum())
+
+
 def extract_bi_grams(input_string, remove_spaces=False):
     """
-    Generate 2-grams from a string, optionally removing spaces and certain characters.
+    Generate 2-grams after normalizing to lowercase alphanumeric characters only.
     Args:
         input_string (str): The input string to process.
-        remove_spaces (bool): Whether to remove spaces before generating 2-grams.
+        remove_spaces (bool): Kept for backwards compatibility; spaces are always removed by normalization.
     Returns:
         list: List of 2-gram strings.
     """
-    chars_to_remove = '"./'
-    translation_table = str.maketrans('', '', chars_to_remove)
-    cleaned = input_string.translate(translation_table).strip().lower()
-    if remove_spaces:
-        cleaned = cleaned.replace(' ', '')
-    # Generate 2-grams, excluding those containing spaces
-    return [cleaned[i:i+2] for i in range(len(cleaned) - 1) if ' ' not in cleaned[i:i+2]]
+    cleaned = normalize_alphanumeric(input_string)
+    return [cleaned[i:i+2] for i in range(len(cleaned) - 1)]
 
 
 def lowercase_df(df):
@@ -31,7 +30,7 @@ def lowercase_df(df):
 
 def get_all_bi_grams():
     """
-    Generate all possible 2-grams from lowercase letters and digits.
+    Generate all possible alphanumeric 2-grams from lowercase letters and digits.
     Returns:
         list: List of all possible 2-gram strings.
     """
@@ -40,4 +39,5 @@ def get_all_bi_grams():
     letter_letter_grams = [a + b for a in alphabet for b in alphabet]
     digit_digit_grams = [d1 + d2 for d1 in digits for d2 in digits]
     letter_digit_grams = [l + d for l in alphabet for d in digits]
-    return letter_letter_grams + letter_digit_grams + digit_digit_grams
+    digit_letter_grams = [d + l for d in digits for l in alphabet]
+    return letter_letter_grams + letter_digit_grams + digit_letter_grams + digit_digit_grams

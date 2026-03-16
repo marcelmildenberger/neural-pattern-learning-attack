@@ -318,7 +318,7 @@ def greedy_reconstruction(results):
 
 def create_identifier_column_dynamic(df, components):
     cleaned_cols = [
-        df[col].astype(str).str.replace('/', '', regex=False)
+        df[col].astype(str).map(normalize_alphanumeric)
         for col in components
     ]
     return pd.Series(map(''.join, zip(*cleaned_cols)), index=df.index).str.lower()
