@@ -19,7 +19,7 @@
         "GraphMatchingAttack": false
     },
     "ENC_CONFIG": {
-        "AliceAlgo": "rse",
+        "AliceAlgo": "RSE",
         "AliceSecret": "SuperSecretSalt1337",
         "AliceN": 2,
         "AliceMetric": "dice",
