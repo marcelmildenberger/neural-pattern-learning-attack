@@ -38,6 +38,7 @@ DEFAULT_TMH_ONE_BIT = True
 DEFAULT_TSH_NUM_HASH_FUNC = 10
 DEFAULT_TSH_NUM_HASH_COL = 1000
 DEFAULT_TSH_RAND_MODE = "PNG"
+DEFAULT_RSE_K = 40
 DEFAULT_RSE_REF_SET_LENGTH = 20
 RSE_ALPHABET = string.ascii_lowercase + string.digits
 
@@ -491,7 +492,7 @@ def main() -> None:
                         help="Path for the RSE reference-set CSV. If omitted, a correct alphanumeric file is generated automatically.")
     parser.add_argument("--rse-qgram-frequency-file", type=Path, default=None,
                         help="Path for the generated RSE q-gram frequency CSV. If omitted, a file is generated automatically.")
-    parser.add_argument("--rse-k", type=int, default=None,
+    parser.add_argument("--rse-k", type=int, default=DEFAULT_RSE_K,
                         help="RSE parameter k: number of reference sets in which each q-gram must occur.")
     parser.add_argument("--rse-ref-set-length", type=int, default=DEFAULT_RSE_REF_SET_LENGTH,
                         help="Length of each RSE reference set.")
@@ -503,7 +504,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if "rse" in args.encoders:
-        if args.rse_k is None or args.rse_k <= 0:
+        if args.rse_k <= 0:
             parser.error("--rse-k must be a positive integer when '--encoders rse' is selected.")
         if args.rse_ref_set_length <= 0:
             parser.error("--rse-ref-set-length must be a positive integer when '--encoders rse' is selected.")
