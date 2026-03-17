@@ -157,6 +157,13 @@ def extract_rse_q_grams(value: str, q: int) -> set[str]:
     return set(iter_rse_q_grams(value, q))
 
 
+def expand_vah_tokens_to_rse_q_grams(tokens: Iterable[str], q: int) -> set[str]:
+    expanded_q_grams = set()
+    for token in tokens:
+        expanded_q_grams.update(iter_rse_q_grams(token, q))
+    return expanded_q_grams
+
+
 def build_rse_record_store(data: List[List[str]], uids: List[str], q: int):
     rse = load_rse_encoder_module()
     record_store = {}
@@ -353,11 +360,15 @@ def harden_record_store_with_vah(
     vah_instance,
     q_gram_counter: Counter[str],
     dataset_label: str,
+    q: int,
 ) -> tuple[dict, Counter[str]]:
     print(f"Applying VAH hardening to {dataset_label}")
     data_dict = {uid: set(record[q_gram_attr]) for uid, record in record_store.items()}
     hardened_data_dict = vah_instance.harden_with_vah_ref_sets(copy.deepcopy(data_dict), dict(q_gram_counter))
-    hardened_store = {uid: {q_gram_attr: hardened_data_dict[uid]} for uid in record_store.keys()}
+    hardened_store = {
+        uid: {q_gram_attr: expand_vah_tokens_to_rse_q_grams(hardened_data_dict[uid], q)}
+        for uid in record_store.keys()
+    }
     hardened_counter = count_record_store_q_grams(hardened_store, q_gram_attr)
     return hardened_store, hardened_counter
 
@@ -371,9 +382,9 @@ def maybe_apply_vah_hardening(
     aux_public_counter: Counter[str],
     args: argparse.Namespace,
     q_gram_attr: str,
-) -> tuple[dict, Counter[str], dict, Counter[str]]:
+) -> tuple[dict, Counter[str], dict, Counter[str], dict, Counter[str]]:
     if not args.rse_hardening:
-        return primary_store, primary_counter, aux_sample_store, aux_sample_counter
+        return primary_store, primary_counter, aux_sample_store, aux_sample_counter, aux_public_store, aux_public_counter
 
     if args.rse_hardening_vuln_qgrams <= 0:
         raise ValueError("--rse-hardening-vuln-qgrams must be positive when VAH hardening is enabled.")
@@ -402,6 +413,7 @@ def maybe_apply_vah_hardening(
         vah_instance,
         primary_counter,
         "the primary dataset",
+        args.ngram_size,
     )
     hardened_aux_store, hardened_aux_counter = harden_record_store_with_vah(
         aux_sample_store,
@@ -409,8 +421,24 @@ def maybe_apply_vah_hardening(
         vah_instance,
         aux_sample_counter,
         "the sampled auxiliary dataset",
+        args.ngram_size,
     )
-    return hardened_primary_store, hardened_primary_counter, hardened_aux_store, hardened_aux_counter
+    hardened_public_store, hardened_public_counter = harden_record_store_with_vah(
+        aux_public_store,
+        q_gram_attr,
+        vah_instance,
+        aux_public_counter,
+        "the public auxiliary dataset used for RSE frequencies",
+        args.ngram_size,
+    )
+    return (
+        hardened_primary_store,
+        hardened_primary_counter,
+        hardened_aux_store,
+        hardened_aux_counter,
+        hardened_public_store,
+        hardened_public_counter,
+    )
 
 
 def encode_with_bf(data: List[List[str]], uids: List[str], args: argparse.Namespace, diffusion=False, bf_t=10):
@@ -514,7 +542,14 @@ def encode_with_rse(data: List[List[str]], uids: List[str], args: argparse.Names
     aux_sample_store = {uid: aux_full_store[uid] for uid in sampled_aux_uids}
     aux_sample_q_gram_counter = count_record_store_q_grams(aux_sample_store, rse.Q_GRAM_ATTR)
 
-    primary_store, primary_q_gram_counter, aux_sample_store, aux_sample_q_gram_counter = maybe_apply_vah_hardening(
+    (
+        primary_store,
+        primary_q_gram_counter,
+        aux_sample_store,
+        aux_sample_q_gram_counter,
+        aux_full_store,
+        aux_full_q_gram_counter,
+    ) = maybe_apply_vah_hardening(
         primary_store,
         primary_q_gram_counter,
         aux_sample_store,
@@ -526,9 +561,8 @@ def encode_with_rse(data: List[List[str]], uids: List[str], args: argparse.Names
     )
 
     ref_set_file, q_gram_frequency_file = resolve_rse_artifact_paths(ds_path, aux_source_path, args)
-    q_gram_counter = count_rse_q_gram_frequencies(aux_source_data, args.ngram_size)
-    write_rse_q_gram_frequencies(q_gram_counter, q_gram_frequency_file)
-    print(f"- Wrote RSE q-gram frequencies from public source dataset {aux_source_path}: {q_gram_frequency_file}")
+    write_rse_q_gram_frequencies(aux_full_q_gram_counter, q_gram_frequency_file)
+    print(f"- Wrote RSE q-gram frequencies from the public auxiliary record-set representation {aux_source_path}: {q_gram_frequency_file}")
     print_csv_preview(q_gram_frequency_file)
 
     ref_set_file = ensure_rse_reference_sets(ref_set_file, args)
