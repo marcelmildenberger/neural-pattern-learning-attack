@@ -1,6 +1,0 @@
-Average entry length: 21
-Maximum entry length: 33
-Top 20 2-grams: ['19', '11', 'er', 'ar', 'an', 'on', '21', '12', '95', '99', '98', '94', '97', '96', 'el', 'le', 'll', 'ri', 'ma', 'in']
-Precision: 0.2151
-Recall: 0.2463
-F1 Score: 0.2288
