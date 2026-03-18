@@ -2,7 +2,7 @@
     "GLOBAL_CONFIG": {
         "Data": "./data/datasets/fakename_5k.tsv",
         "AnalysisData": null,
-        "Overlap": 0.8197,
+        "Overlap": 0.912345,
         "DropFrom": "Eve",
         "Verbose": true,
         "MatchingMetric": "cosine",
@@ -16,14 +16,14 @@
         "SaveModel": false,
         "SavePredictions": true,
         "UseNoisyDatasets": false,
-        "GraphMatchingAttack": false
+        "GraphMatchingAttack": true
     },
     "ENC_CONFIG": {
         "AliceAlgo": "RSE",
         "AliceSecret": "SuperSecretSalt1337",
         "AliceN": 2,
         "AliceMetric": "dice",
-        "EveAlgo": "BloomFilter",
+        "EveAlgo": "None",
         "EveSecret": "ATotallyDifferentString42",
         "EveN": 2,
         "EveMetric": "dice",
