@@ -45,12 +45,11 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG,
     if GLOBAL_CONFIG["BenchMode"] and start_total is not None:
         timings["elapsed_total"] = time.time() - start_total
 
-    datasets = load_datasets_or_terminate(context, ENC_CONFIG, NEPAL_CONFIG, GLOBAL_CONFIG, logger, timings)
-    if datasets is None:
+    if load_datasets_or_terminate(context, ENC_CONFIG, NEPAL_CONFIG, GLOBAL_CONFIG, logger, timings) is None:
         return 1
 
     start_hpo = time.time() if GLOBAL_CONFIG["BenchMode"] else None
-    best_result, best_config = run_hyperparameter_search(context, GLOBAL_CONFIG, ENC_CONFIG, NEPAL_CONFIG, logger)
+    best_config = run_hyperparameter_search(context, GLOBAL_CONFIG, ENC_CONFIG, NEPAL_CONFIG, logger)
     if GLOBAL_CONFIG["BenchMode"] and start_hpo is not None:
         timings["elapsed_hyperparameter_optimization"] = time.time() - start_hpo
 
@@ -61,7 +60,7 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG,
     if GLOBAL_CONFIG["BenchMode"] and start_training is not None:
         timings["elapsed_model_training"] = time.time() - start_training
 
-    save_training_artifacts(context, GLOBAL_CONFIG, best_config, model_bundle, train_losses, val_losses)
+    save_training_artifacts(GLOBAL_CONFIG, best_config, model_bundle, train_losses, val_losses)
 
     start_eval = time.time() if GLOBAL_CONFIG["BenchMode"] else None
     avg_metrics, results, per_bigram_df = evaluate_model(model_bundle, context, GLOBAL_CONFIG, best_config, logger)

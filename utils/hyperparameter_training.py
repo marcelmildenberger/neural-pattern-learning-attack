@@ -1,13 +1,12 @@
-
 import copy
-import torch
-from utils.pytorch_base_model import BaseModel
-from utils.early_stopping import EarlyStopping
-from torch.utils.data import DataLoader
-import torch.optim as optim
 import torch.nn as nn
+import torch
+import torch.optim as optim
 from ray import tune
+from torch.utils.data import DataLoader
+
 from utils.data_pipeline import load_experiment_datasets
+from utils.early_stopping import EarlyStopping
 from utils.modeling import (
     calculate_performance_metrics,
     decode_labels_to_bi_grams,
@@ -15,10 +14,25 @@ from utils.modeling import (
     map_probabilities_to_bi_grams,
     run_epoch,
 )
+from utils.pytorch_base_model import BaseModel
 
-# Define a function to train a model with a given configuration.
-# This function is used by Ray Tune to train models with different hyperparameters.
-def hyperparameter_training(config, data_dir, output_dim, alice_enc_hash, identifier, patience, min_delta, workers, ENC_CONFIG, NEPAL_CONFIG, GLOBAL_CONFIG, bi_gram_dict, all_bi_grams):
+
+def hyperparameter_training(
+    config,
+    data_dir,
+    output_dim,
+    alice_enc_hash,
+    identifier,
+    patience,
+    min_delta,
+    workers,
+    ENC_CONFIG,
+    NEPAL_CONFIG,
+    GLOBAL_CONFIG,
+    bi_gram_dict,
+    all_bi_grams,
+):
+    """Train one Ray Tune trial and report validation metrics."""
     # Sample all hyperparameters up front
     batch_size = int(config["batch_size"])
     num_layers = config["num_layers"]
@@ -31,7 +45,16 @@ def hyperparameter_training(config, data_dir, output_dim, alice_enc_hash, identi
     lr_scheduler_cfg = config["lr_scheduler"]
 
     # Load data
-    datasets = load_experiment_datasets(data_dir, alice_enc_hash, identifier, ENC_CONFIG, NEPAL_CONFIG, GLOBAL_CONFIG, all_bi_grams, splits=("train", "val"))
+    datasets = load_experiment_datasets(
+        data_dir,
+        alice_enc_hash,
+        identifier,
+        ENC_CONFIG,
+        NEPAL_CONFIG,
+        GLOBAL_CONFIG,
+        all_bi_grams,
+        splits=("train", "val"),
+    )
     data_train, data_val = datasets["train"], datasets["val"]
     input_dim = data_train[0][0].shape[0]
 
@@ -142,13 +165,23 @@ def hyperparameter_training(config, data_dir, output_dim, alice_enc_hash, identi
     # Train the model for a specified number of epochs.
     for _ in range(NEPAL_CONFIG["Epochs"]):
         epochs += 1
-        train_loss = run_epoch(
-            model, dataloader_train, criterion, optimizer, device,
-            is_training=True, verbose=GLOBAL_CONFIG["Verbose"], scheduler=scheduler
+        run_epoch(
+            model,
+            dataloader_train,
+            criterion,
+            optimizer,
+            device,
+            is_training=True,
+            scheduler=scheduler,
         )
         val_loss = run_epoch(
-            model, dataloader_val, criterion, optimizer, device,
-            is_training=False, verbose=GLOBAL_CONFIG["Verbose"], scheduler=scheduler
+            model,
+            dataloader_val,
+            criterion,
+            optimizer,
+            device,
+            is_training=False,
+            scheduler=scheduler,
         )
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -172,7 +205,9 @@ def hyperparameter_training(config, data_dir, output_dim, alice_enc_hash, identi
         batch_bi_gram_scores = map_probabilities_to_bi_grams(bi_gram_dict, probabilities)
         batch_filtered_bi_gram_scores = filter_high_scoring_bi_grams(batch_bi_gram_scores, threshold)
         dice, precision, recall, f1 = calculate_performance_metrics(
-            actual_bi_grams, batch_filtered_bi_gram_scores)
+            actual_bi_grams,
+            batch_filtered_bi_gram_scores,
+        )
         total_dice += dice
         total_precision += precision
         total_recall += recall

@@ -54,6 +54,7 @@ def _dataloader_workers(GLOBAL_CONFIG):
 
 
 def prepare_run_context(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG, logger):
+    """Prepare run metadata, derived configuration, and cache identifiers."""
     ALIGN_CONFIG["RegWS"] = max(0.1, GLOBAL_CONFIG["Overlap"] / 3)
     GLOBAL_CONFIG["Workers"] = max_cpu_cores = os.cpu_count()
 
@@ -134,7 +135,6 @@ def prepare_run_context(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEP
     identifier = f"{eve_enc_hash}_{alice_enc_hash}_{eve_emb_hash}_{alice_emb_hash}"
 
     return {
-        "all_configs": all_configs,
         "all_bi_grams": all_bi_grams,
         "bi_gram_dict": bi_gram_dict,
         "current_experiment_directory": current_experiment_directory,
@@ -154,6 +154,7 @@ def prepare_run_context(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEP
 
 
 def ensure_input_artifacts(context, GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, logger):
+    """Create or reuse the cached GMA or synthetic split artifacts for a run."""
     cached_paths = (
         context["path_reidentified"],
         context["path_not_reidentified"],
@@ -206,6 +207,7 @@ def ensure_input_artifacts(context, GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN
 
 
 def load_datasets_or_terminate(context, ENC_CONFIG, NEPAL_CONFIG, GLOBAL_CONFIG, logger, timings):
+    """Load train/val/test datasets and stop early if any split is empty."""
     datasets = load_experiment_datasets(
         context["data_dir"],
         context["alice_enc_hash"],
@@ -288,6 +290,7 @@ def _build_search_space(output_dim):
 
 
 def run_hyperparameter_search(context, GLOBAL_CONFIG, ENC_CONFIG, NEPAL_CONFIG, logger):
+    """Run Ray Tune and return the resolved best configuration."""
     if logger.isEnabledFor(logging.INFO):
         logger.info(
             "Starting hyperparameter search: samples=%s | metric=%s | early_stop=%.2f",
@@ -359,10 +362,11 @@ def run_hyperparameter_search(context, GLOBAL_CONFIG, ENC_CONFIG, NEPAL_CONFIG, 
     if logger.isEnabledFor(logging.INFO):
         logger.info("Best trial %s = %s", NEPAL_CONFIG["MetricToOptimize"], best_metric_value)
 
-    return best_result, resolve_config(best_result.config)
+    return resolve_config(best_result.config)
 
 
 def prepare_training_run(context, GLOBAL_CONFIG, ENC_CONFIG, NEPAL_CONFIG, best_config, logger):
+    """Build datasets, dataloaders, model, and optimizer objects for final training."""
     datasets = load_experiment_datasets(
         context["data_dir"],
         context["alice_enc_hash"],
@@ -459,7 +463,6 @@ def prepare_training_run(context, GLOBAL_CONFIG, ENC_CONFIG, NEPAL_CONFIG, best_
     os.makedirs(trained_model_directory, exist_ok=True)
 
     return {
-        "datasets": datasets,
         "dataloader_train": dataloader_train,
         "dataloader_val": dataloader_val,
         "dataloader_test": dataloader_test,
@@ -534,6 +537,7 @@ def _create_scheduler(optimizer, best_config):
 
 
 def train_final_model(model_bundle, best_config, NEPAL_CONFIG, GLOBAL_CONFIG, logger):
+    """Train the final model with early stopping and restore the best checkpoint."""
     model = model_bundle["model"]
     criterion = model_bundle["criterion"]
     optimizer = model_bundle["optimizer"]
@@ -561,7 +565,6 @@ def train_final_model(model_bundle, best_config, NEPAL_CONFIG, GLOBAL_CONFIG, lo
             optimizer,
             model_bundle["device"],
             is_training=True,
-            verbose=verbose,
             scheduler=scheduler,
         )
         val_loss = run_epoch(
@@ -571,7 +574,6 @@ def train_final_model(model_bundle, best_config, NEPAL_CONFIG, GLOBAL_CONFIG, lo
             optimizer,
             model_bundle["device"],
             is_training=False,
-            verbose=verbose,
             scheduler=scheduler,
         )
         if val_loss < best_val_loss:
@@ -604,7 +606,8 @@ def train_final_model(model_bundle, best_config, NEPAL_CONFIG, GLOBAL_CONFIG, lo
     return model, train_losses, val_losses
 
 
-def save_training_artifacts(context, GLOBAL_CONFIG, best_config, model_bundle, train_losses, val_losses):
+def save_training_artifacts(GLOBAL_CONFIG, best_config, model_bundle, train_losses, val_losses):
+    """Persist training artifacts that belong to the final trained model."""
     plot_loss_curves(
         train_losses,
         val_losses,
@@ -619,6 +622,7 @@ def save_training_artifacts(context, GLOBAL_CONFIG, best_config, model_bundle, t
 
 
 def evaluate_model(model_bundle, context, GLOBAL_CONFIG, best_config, logger):
+    """Evaluate the trained model and assemble aggregate and per-bigram metrics."""
     total_dice = total_precision = total_recall = total_f1 = 0.0
     rand_total_dice = rand_total_precision = rand_total_recall = rand_total_f1 = 0.0
     num_samples = 0
@@ -788,6 +792,7 @@ def evaluate_model(model_bundle, context, GLOBAL_CONFIG, best_config, logger):
 
 
 def save_evaluation_outputs(context, model_bundle, GLOBAL_CONFIG, avg_metrics, results, per_bigram_df, logger):
+    """Save evaluation tables, metrics, prediction outputs, and plots."""
     per_bigram_df.to_csv(
         os.path.join(context["current_experiment_directory"], "per_bigram_metrics.csv"),
         index=False,
@@ -830,16 +835,15 @@ def save_evaluation_outputs(context, model_bundle, GLOBAL_CONFIG, avg_metrics, r
         if logger.isEnabledFor(logging.INFO):
             logger.info("Saved predictions to %s", results_path)
 
-    results_df = pd.json_normalize(results)
     plot_metric_distributions(
-        results_df,
+        pd.json_normalize(results),
         model_bundle["trained_model_directory"],
         save=GLOBAL_CONFIG["SaveResults"],
     )
-    return results_df
 
 
 def maybe_run_reidentification(context, GLOBAL_CONFIG, logger, results):
+    """Run greedy re-identification unless a custom analysis dataset is in use."""
     analysis_data_path = GLOBAL_CONFIG.get("AnalysisData")
     if analysis_data_path:
         if logger.isEnabledFor(logging.INFO):

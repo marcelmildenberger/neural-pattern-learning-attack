@@ -25,11 +25,15 @@ def get_cache_path(data_directory, identifier, alice_enc_hash, name="dataset", e
 
 
 def read_tsv(path: str, skip_header: bool = True, as_dict: bool = False, delim: str = "\t") -> Sequence[Sequence[str]]:
+    """Read a TSV file and return row data, UIDs, and the header."""
     data = {} if as_dict else []
     uid = []
     with open(path, "r") as f:
         reader = csv.reader(f, delimiter=delim)
-        header = next(reader)
+        if skip_header:
+            header = next(reader)
+        else:
+            header = next(reader)
         for row in reader:
             if as_dict:
                 assert len(row) == 3, "Dict mode only supports rows with two values + uid"
@@ -49,6 +53,7 @@ def save_tsv(data, path: str, delim: str = "\t", mode="w", write_header: bool = 
 
 
 def greedy_reconstruction(results):
+    """Greedily reconstruct identifiers from predicted bigram chains."""
     reconstructed_results = []
 
     for entry in results:
@@ -131,6 +136,7 @@ def reidentification_analysis(df_1, df_2, merge_on, len_not_reidentified, save_p
 
 
 def load_dataframe(path):
+    """Load an HDF-backed experiment table into a DataFrame."""
     data = hkl.load(path)
     return pd.DataFrame(data[1:], columns=data[0])
 
@@ -309,12 +315,13 @@ def load_experiment_datasets(
     alice_enc_hash,
     identifier,
     ENC_CONFIG,
-    nepal_CONFIG,
+    NEPAL_CONFIG,
     GLOBAL_CONFIG,
     all_bi_grams,
     splits=("train", "val", "test"),
 ):
-    cache_disambiguator = f"train{nepal_CONFIG['TrainSize']}_dev{GLOBAL_CONFIG['DevMode']}"
+    """Load cached experiment datasets or build them from the GMA artifacts."""
+    cache_disambiguator = f"train{NEPAL_CONFIG['TrainSize']}_dev{GLOBAL_CONFIG['DevMode']}"
     cache_path = get_cache_path(data_directory, identifier, alice_enc_hash, extra_key=cache_disambiguator)
 
     if os.path.exists(cache_path):
@@ -338,7 +345,7 @@ def load_experiment_datasets(
 
     data_labeled = dataset_class(df_reidentified, **common_args, **dataset_args)
     data_test = dataset_class(df_test, **common_args, **dataset_args)
-    train_size = int(nepal_CONFIG["TrainSize"] * len(data_labeled))
+    train_size = int(NEPAL_CONFIG["TrainSize"] * len(data_labeled))
     val_size = len(data_labeled) - train_size
     data_train, data_val = random_split(data_labeled, [train_size, val_size])
     result = {"train": data_train, "val": data_val, "test": data_test}

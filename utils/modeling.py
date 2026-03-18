@@ -17,8 +17,7 @@ KEYS_TO_REMOVE = [
 
 
 def get_hashes(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG):
-    # Compute hashes of configuration to store/load data and thus avoid redundant computations.
-    # Using MD5 because Python's native hash() is not stable across processes
+    """Build stable cache keys for the encoding and embedding configuration."""
     if GLOBAL_CONFIG["DropFrom"] == "Alice":
         eve_enc_hash = md5(
             ("%s-%s-DropAlice" % (str(ENC_CONFIG), GLOBAL_CONFIG["Data"])).encode()
@@ -93,11 +92,11 @@ def run_epoch(
     optimizer,
     device,
     is_training,
-    verbose,
     scheduler=None,
     scheduler_step=None,
     clip_grad_norm=0.0,
 ):
+    """Run one train or evaluation epoch and return the average loss."""
     model.train(mode=is_training)
     running_loss = 0.0
 
