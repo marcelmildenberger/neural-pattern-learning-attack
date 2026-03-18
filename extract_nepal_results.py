@@ -3,6 +3,16 @@ import json
 import pandas as pd
 from pathlib import Path
 
+PHASE_NAME_MAP = {
+    "gma": "GraphMatchingAttack",
+    "hyperparameter_optimization": "HyperparameterOptimization",
+    "model_training": "ModelTraining",
+    "application_to_encoded_data": "ApplicationtoEncodedData",
+    "refinement_and_reconstruction": "RefinementandReconstruction",
+    "total_runtime": "TotalRuntime",
+}
+
+
 def read_json_file(file_path):
     """Read and parse JSON file"""
     try:
@@ -12,6 +22,7 @@ def read_json_file(file_path):
         print(f"Error reading {file_path}: {e}")
         return None
 
+
 def read_csv_file(file_path):
     """Read and parse CSV file"""
     try:
@@ -19,6 +30,44 @@ def read_csv_file(file_path):
     except Exception as e:
         print(f"Error reading {file_path}: {e}")
         return None
+
+
+def build_metric_map(df):
+    if df is None:
+        return {}
+    metric_map = {}
+    for _, row in df.iterrows():
+        metric = str(row.get("metric", "")).strip().lower()
+        metric_map[metric] = row.get("value")
+    return metric_map
+
+
+def to_int(value):
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        value = value.strip()
+        if value == "":
+            return None
+        try:
+            return int(float(value))
+        except ValueError:
+            return None
+    return None
+
+
+def to_float(value):
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        value = value.strip()
+        if value == "":
+            return None
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
 
 def extract_reidentification_rate(summary_df):
     """Extract reidentification rate from summary CSV"""
@@ -32,9 +81,8 @@ def extract_reidentification_rate(summary_df):
             is_percent = isinstance(value, str) and '%' in value
             if isinstance(value, str):
                 value = value.strip().replace('%', '')
-            try:
-                rate = float(value)
-            except (TypeError, ValueError):
+            rate = to_float(value)
+            if rate is None:
                 continue
             if is_percent or rate > 1:
                 rate /= 100
@@ -45,18 +93,13 @@ def extract_metrics(metrics_df):
     """Extract metrics from trained model CSV"""
     if metrics_df is None:
         return {}
-    
+
     metrics = {}
     for _, row in metrics_df.iterrows():
         metric_name = row['metric']
         value = row['value']
-        # Convert numeric values
-        try:
-            if isinstance(value, str) and value.replace('.', '').replace('-', '').isdigit():
-                value = float(value)
-        except:
-            pass
-        metrics[metric_name] = value
+        numeric_value = to_float(value)
+        metrics[metric_name] = numeric_value if numeric_value is not None else value
     return metrics
 
 def extract_reidentification_info(results_dir, matching_technique=None):
@@ -86,57 +129,58 @@ def extract_reidentification_info(results_dir, matching_technique=None):
     if summary_df is None:
         return info
 
-    metric_map = {}
-    for _, row in summary_df.iterrows():
-        metric = str(row.get("metric", "")).strip().lower()
-        metric_map[metric] = row.get("value")
+    metric_map = build_metric_map(summary_df)
 
     rate = extract_reidentification_rate(summary_df)
     method = metric_map.get("reidentification_method")
     total_reidentified = metric_map.get("total_reidentified_individuals")
     total_not_reidentified = metric_map.get("total_not_reidentified_individuals")
 
-    def _to_int(value):
-        if isinstance(value, (int, float)):
-            return int(value)
-        if isinstance(value, str):
-            value = value.strip()
-            if value.isdigit():
-                return int(value)
-        return None
-
     info["ReidentificationMethod"] = method if isinstance(method, str) and method else target_file.stem.replace("summary_", "")
     info["ReidentificationRate"] = rate
-    info["TotalReidentifiedIndividuals"] = _to_int(total_reidentified)
-    info["TotalNotReidentifiedIndividuals"] = _to_int(total_not_reidentified)
+    info["TotalReidentifiedIndividuals"] = to_int(total_reidentified)
+    info["TotalNotReidentifiedIndividuals"] = to_int(total_not_reidentified)
     return info
 
 def extract_runtime(runtime_df):
     """Extract runtime information from NEPAL runtime log"""
     if runtime_df is None:
         return {}
-    
+
     runtimes = {}
     for _, row in runtime_df.iterrows():
         phase = row['phase']
-        # Convert phase names to match expected format
-        if phase == "gma":
-            key = "GraphMatchingAttack"
-        elif phase == "hyperparameter_optimization":
-            key = "HyperparameterOptimization"
-        elif phase == "model_training":
-            key = "ModelTraining"
-        elif phase == "application_to_encoded_data":
-            key = "ApplicationtoEncodedData"
-        elif phase == "refinement_and_reconstruction":
-            key = "RefinementandReconstruction"
-        elif phase == "total_runtime":
-            key = "TotalRuntime"
-        else:
-            key = phase.replace(" ", "")
-        
+        key = PHASE_NAME_MAP.get(phase, phase.replace(" ", ""))
         runtimes[key] = row['runtime_minutes']
     return runtimes
+
+
+def extract_gma_info(results_dir):
+    """Extract GMA summary information, if available."""
+    info = {
+        "GMACorrectMatches": None,
+        "GMASuccessRate": None,
+        "GMAAliceRecordCount": None,
+        "GMAEveRecordCount": None,
+        "GMAOverlapCount": None,
+    }
+
+    summary_path = results_dir / "summary.csv"
+    if not summary_path.exists():
+        return info
+
+    summary_df = read_csv_file(summary_path)
+    if summary_df is None:
+        return info
+
+    metric_map = build_metric_map(summary_df)
+
+    info["GMACorrectMatches"] = to_int(metric_map.get("correct_matches"))
+    info["GMASuccessRate"] = to_float(metric_map.get("success_rate"))
+    info["GMAAliceRecordCount"] = to_int(metric_map.get("alice_record_count"))
+    info["GMAEveRecordCount"] = to_int(metric_map.get("eve_record_count"))
+    info["GMAOverlapCount"] = to_int(metric_map.get("overlap_count"))
+    return info
 
 def extract_experiment_data(exp_dir):
     """Extract all data from a single experiment directory"""
@@ -164,6 +208,7 @@ def extract_experiment_data(exp_dir):
     # Read re-identification results based on configured matching technique
     matching_technique = nepal_config.get("MatchingTechnique") or global_config.get("MatchingTechnique")
     reid_info = extract_reidentification_info(exp_path / "re_identification_results", matching_technique)
+    gma_info = extract_gma_info(exp_path / "gma_results")
     
     # Read runtime data (may not exist if BenchMode was disabled)
     runtime_df = read_csv_file(exp_path / "nepal_runtime_log.csv")
@@ -190,6 +235,7 @@ def extract_experiment_data(exp_dir):
         "TrainedDice": metrics.get("avg_dice"),
     }
     record.update(reid_info)
+    record.update(gma_info)
     
     # Add hyperparameter optimization results (only if HPO was enabled)
     if best_result:

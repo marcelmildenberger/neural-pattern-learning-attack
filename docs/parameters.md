@@ -46,7 +46,7 @@ ___
 | UseGPU   | Use GPU for CUDA.   | True      |
 | SaveModel   | Save the final trained neural network model.   | False      |
 | SavePredictions   | Save the predicted q-grams for each record with performance metrics.   | False      |
-| GraphMatchingAttack   | Enable or Disable running the GMA to produce the known plaintext-encoding pairs. If disabled, a synthetic datasplit will be created   | False      |
+| GraphMatchingAttack   | Enable or Disable running the GMA to produce the known plaintext-encoding pairs. If disabled, a synthetic datasplit will be created. For encoded schemes, GMA expects the corresponding precomputed `*_encoded.tsv` files.   | False      |
 ___
 
 ## Encoding Configuration
@@ -54,11 +54,11 @@ ___
 
 | Parameter Name | Description                                                                                                        | Default                     |
 |----------------|--------------------------------------------------------------------------------------------------------------------|-----------------------------|
-| AliceAlgo      | Algorithm used for encoding Alice's data. One of "BloomFilter", "TabMinHash", "TwoStepHash", "RSE" or None (No Encoding). RSE currently requires a pre-encoded `*_rse_encoded.tsv` dataset and synthetic splits (`GraphMatchingAttack = False`). | "TwoStepHash"               |
+| AliceAlgo      | Algorithm used for encoding Alice's data. One of "BloomFilter", "TabMinHash", "TwoStepHash", "RSE" or None (No Encoding). For encoded schemes, GMA reads the corresponding precomputed encoded TSV for Alice instead of re-encoding plaintext during the run. | "TwoStepHash"               |
 | AliceSecret    | Secret (seed for hash function selection/salt) used when encoding Alice's data. Can be String or Integer.          | "SuperSecretSalt1337"       |
 | AliceN         | Size of N-grams used for encoding Alice's data.                                                                    | 2                           |
 | AliceMetric    | Similarity metric to be computed during similarity graph generation on Alice's data.                               | "dice"                      |
-| EveAlgo        | Algorithm used for encoding Eve's data. One of "BloomFilter", "TabMinHash", "TwoStepHash", "RSE" or None (No Encoding). RSE is not currently supported in the graph matching stage.   | None                        |
+| EveAlgo        | Algorithm used for encoding Eve's data. One of "BloomFilter", "TabMinHash", "TwoStepHash", "RSE" or None (No Encoding). For encoded schemes, GMA reads the corresponding precomputed encoded TSV for Eve instead of re-encoding plaintext during the run.   | None                        |
 | EveSecret      | Secret (seed for hash function selection/salt) used when encoding Eve's data. Can be String or Integer.            | "ATotallyDifferentString42" |
 | EveN           | Size of N-grams used for encoding Eve's data.                                                                      | 2                           |
 | EveMetric      | Similarity metric to be computed during similarity graph generation on Eve's data.                                 | "dice"                      |
