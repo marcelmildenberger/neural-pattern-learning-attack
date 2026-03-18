@@ -5,8 +5,8 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
-from textual.containers import Center, Horizontal, Container, Vertical
-from textual.widgets import Label, Button, Footer, Static, Header, DataTable, RadioSet, RadioButton, Rule, Checkbox
+from textual.containers import Center, Horizontal, Container
+from textual.widgets import Label, Button, Footer, Static, Header, DataTable, RadioSet, RadioButton, Rule
 
 from textual_fspicker import FileOpen, FileSave, Filters
 
@@ -351,4 +351,3 @@ class PreproApp(App[None]):
 ##############################################################################
 if __name__ == "__main__":
     PreproApp().run()
-

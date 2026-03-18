@@ -7,7 +7,7 @@ from nepal.utils.utils import calculate_performance_metrics, decode_labels_to_bi
 from torch.utils.data import DataLoader
 import torch.optim as optim
 import torch.nn as nn
-from ray import tune, train
+from ray import tune
 
 # Define a function to train a model with a given configuration.
 # This function is used by Ray Tune to train models with different hyperparameters.

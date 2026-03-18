@@ -18,7 +18,7 @@ from graphMatching.main import run as run_gma
 from nepal.utils.pytorch_base_model import BaseModel
 from nepal.utils.utils import *
 import ray
-from ray import tune, train
+from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
 
