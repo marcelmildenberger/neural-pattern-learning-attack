@@ -9,6 +9,18 @@ import torch.optim as optim
 import torch.nn as nn
 from ray import tune
 
+
+def _dataloader_kwargs(num_workers: int, use_gpu: bool) -> dict:
+    kwargs = {
+        "pin_memory": bool(use_gpu),
+        "num_workers": max(0, int(num_workers)),
+    }
+    if kwargs["num_workers"] > 0:
+        kwargs["persistent_workers"] = True
+        kwargs["prefetch_factor"] = 4 if use_gpu else 2
+    return kwargs
+
+
 # Define a function to train a model with a given configuration.
 # This function is used by Ray Tune to train models with different hyperparameters.
 def hyperparameter_training(config, data_dir, output_dim, alice_enc_hash, identifier, patience, min_delta, workers, ENC_CONFIG, NEPAL_CONFIG, GLOBAL_CONFIG, bi_gram_dict, all_bi_grams):
@@ -27,23 +39,22 @@ def hyperparameter_training(config, data_dir, output_dim, alice_enc_hash, identi
     datasets = load_experiment_datasets(data_dir, alice_enc_hash, identifier, ENC_CONFIG, NEPAL_CONFIG, GLOBAL_CONFIG, all_bi_grams, splits=("train", "val"))
     data_train, data_val = datasets["train"], datasets["val"]
     input_dim = data_train[0][0].shape[0]
+    loader_kwargs = _dataloader_kwargs(workers, GLOBAL_CONFIG["UseGPU"])
 
     dataloader_train = DataLoader(
         data_train,
         batch_size=batch_size,
         shuffle=True,
-        pin_memory=True,
-        num_workers=workers,
+        **loader_kwargs,
     )
     dataloader_val = DataLoader(
         data_val,
         batch_size=batch_size,
         shuffle=False,
-        pin_memory=True,
-        num_workers=workers,
+        **loader_kwargs,
     )
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if GLOBAL_CONFIG["UseGPU"] and torch.cuda.is_available() else "cpu")
     model = BaseModel(
         input_dim=input_dim,
         output_dim=output_dim,
@@ -159,7 +170,7 @@ def hyperparameter_training(config, data_dir, output_dim, alice_enc_hash, identi
 
     for data, labels, _ in dataloader_val:
         actual_bi_grams = decode_labels_to_bi_grams(bi_gram_dict, labels)
-        data = data.to(device)
+        data = data.to(device, non_blocking=device.type == "cuda")
         logits = model(data)
         probabilities = torch.sigmoid(logits)
         batch_bi_gram_scores = map_probabilities_to_bi_grams(bi_gram_dict, probabilities)

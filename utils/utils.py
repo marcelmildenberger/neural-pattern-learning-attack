@@ -125,12 +125,14 @@ def precision_recall_f1(y_true, y_pred):
 def run_epoch(model, dataloader, criterion, optimizer, device, is_training, verbose, scheduler=None, scheduler_step=None, clip_grad_norm=0.0):
     model.train(mode=is_training)
     running_loss = 0.0
+    use_non_blocking = getattr(device, "type", None) == "cuda"
 
     data_iter = tqdm(dataloader, desc="Training" if is_training else "Validation") if verbose else dataloader
 
     with torch.set_grad_enabled(is_training):
         for data, labels, _ in data_iter:
-            data, labels = data.to(device), labels.to(device)
+            data = data.to(device, non_blocking=use_non_blocking)
+            labels = labels.to(device, non_blocking=use_non_blocking)
 
             if is_training:
                 optimizer.zero_grad()

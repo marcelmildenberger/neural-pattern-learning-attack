@@ -22,6 +22,35 @@ from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
 
+
+def _resolve_worker_count(configured_workers):
+    if configured_workers is None:
+        return max(1, os.cpu_count() or 1)
+    configured = int(configured_workers)
+    if configured <= 0:
+        return max(1, os.cpu_count() or 1)
+    return configured
+
+
+def _recommended_loader_workers(total_workers: int, parallel_trials: int = 1, use_gpu: bool = False) -> int:
+    cpu_budget = max(1, int(total_workers) // max(1, int(parallel_trials)))
+    worker_cap = 8 if use_gpu else 12
+    if use_gpu:
+        cpu_budget = max(1, cpu_budget // 2)
+    return max(1, min(worker_cap, cpu_budget))
+
+
+def _dataloader_kwargs(num_workers: int, use_gpu: bool) -> dict:
+    kwargs = {
+        "pin_memory": bool(use_gpu),
+        "num_workers": max(0, int(num_workers)),
+    }
+    if kwargs["num_workers"] > 0:
+        kwargs["persistent_workers"] = True
+        kwargs["prefetch_factor"] = 4 if use_gpu else 2
+    return kwargs
+
+
 def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG):
     """
     Main experiment entry point for running NEPAL
@@ -32,10 +61,10 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     # ALIGN_CONFIG["RegWS"] is set to the maximum of 0.1 and one third of the overlap parameter.
     # GLOBAL_CONFIG["Workers"] is set to the number of available CPU cores
     ALIGN_CONFIG["RegWS"] = max(0.1, GLOBAL_CONFIG["Overlap"] / 3)
-    GLOBAL_CONFIG["Workers"] = max_cpu_cores = os.cpu_count()
+    GLOBAL_CONFIG["Workers"] = max_cpu_cores = _resolve_worker_count(GLOBAL_CONFIG.get("Workers"))
     
     # Validate and set parallel trials configuration
-    parallel_trials = NEPAL_CONFIG["ParallelTrials"]
+    parallel_trials = max(1, int(NEPAL_CONFIG["ParallelTrials"]))
     if parallel_trials > max_cpu_cores:
         print(f"[WARNING] ParallelTrials ({parallel_trials}) exceeds available CPU cores ({max_cpu_cores}). Setting to {max_cpu_cores}.")
         parallel_trials = max_cpu_cores
@@ -187,6 +216,15 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     optuna_search = OptunaSearch(metric=NEPAL_CONFIG["MetricToOptimize"], mode="max")
     scheduler = ASHAScheduler(metric="total_val_loss", mode="min")
 
+    # Calculate resources per trial based on parallel trials and available resources
+    cpu_per_trial = max(1, GLOBAL_CONFIG["Workers"] // parallel_trials)
+    gpu_per_trial = (gpu_count / parallel_trials) if use_gpu and gpu_count > 0 else 0
+    loader_workers_per_trial = _recommended_loader_workers(
+        cpu_per_trial,
+        parallel_trials=1,
+        use_gpu=use_gpu,
+    )
+
     # Define the trainable function.
     trainable = partial(
         hyperparameter_training,
@@ -196,17 +234,13 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         identifier=identifier,
         patience=NEPAL_CONFIG["Patience"],
         min_delta=NEPAL_CONFIG["MinDelta"],
-        workers=GLOBAL_CONFIG["Workers"] // 15 if GLOBAL_CONFIG["UseGPU"] else 0,
+        workers=loader_workers_per_trial,
         ENC_CONFIG=ENC_CONFIG,
         NEPAL_CONFIG=NEPAL_CONFIG,
         GLOBAL_CONFIG=GLOBAL_CONFIG,
         bi_gram_dict=bi_gram_dict,
         all_bi_grams=all_bi_grams
     )
-
-    # Calculate resources per trial based on parallel trials and available resources
-    cpu_per_trial = max(1, GLOBAL_CONFIG["Workers"] // parallel_trials)
-    gpu_per_trial = (gpu_count / parallel_trials) if use_gpu and gpu_count > 0 else 0
     
     # Wrap the trainable function with resources
     trainable_with_resources = tune.with_resources(
@@ -256,29 +290,30 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     data_train, data_val, data_test = datasets["train"], datasets["val"], datasets["test"]
 
     input_dim=data_train[0][0].shape[0]
+    loader_kwargs = _dataloader_kwargs(
+        _recommended_loader_workers(GLOBAL_CONFIG["Workers"], parallel_trials=1, use_gpu=use_gpu),
+        use_gpu=use_gpu,
+    )
     dataloader_train = DataLoader(
         data_train,
         batch_size=int(best_config.get("batch_size", 32)),
         shuffle=True,
-        pin_memory=True,
-        num_workers=GLOBAL_CONFIG["Workers"] // 15 if GLOBAL_CONFIG["UseGPU"] else 0,
+        **loader_kwargs,
     )
     dataloader_val = DataLoader(
         data_val,
         batch_size=int(best_config.get("batch_size", 32)),
         shuffle=False,
-        pin_memory=True,
-        num_workers=GLOBAL_CONFIG["Workers"] // 15 if GLOBAL_CONFIG["UseGPU"] else 0,
+        **loader_kwargs,
     )
     dataloader_test = DataLoader(
         data_test,
         batch_size=int(best_config.get("batch_size", 32)),
         shuffle=False,
-        pin_memory=True,
-        num_workers=GLOBAL_CONFIG["Workers"] // 15 if GLOBAL_CONFIG["UseGPU"] else 0,
+        **loader_kwargs,
     )
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if use_gpu and torch.cuda.is_available() else "cpu")
     
     model = BaseModel(
         input_dim=input_dim,
@@ -454,7 +489,8 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     dataloader_iter = tqdm(dataloader_test, desc="Test loop") if GLOBAL_CONFIG["Verbose"] else dataloader_test
     with torch.no_grad():
         for data, labels, uids in dataloader_iter:
-            data, labels = data.to(device), labels.to(device)
+            data = data.to(device, non_blocking=device.type == "cuda")
+            labels = labels.to(device, non_blocking=device.type == "cuda")
             logits = model(data)
             probs = torch.sigmoid(logits)
             actual_bi_grams = decode_labels_to_bi_grams(bi_gram_dict, labels)
