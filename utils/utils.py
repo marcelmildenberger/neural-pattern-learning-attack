@@ -429,11 +429,14 @@ def create_synthetic_data_splits(GLOBAL_CONFIG, ENC_CONFIG, data_dir, alice_enc_
 
     # Load the encoded dataset
     data_path = GLOBAL_CONFIG["Data"]          # e.g. "./data/datasets/noisy/fakename_1k.tsv"
+    configured_encoded_path = GLOBAL_CONFIG.get("EncodedDataPath")
     base_path, _ = os.path.splitext(data_path) # "./data/datasets/noisy/fakename_1k"
 
     algo = ENC_CONFIG["AliceAlgo"]
 
-    if algo == "BloomFilter":
+    if configured_encoded_path:
+        encoded_file = configured_encoded_path
+    elif algo == "BloomFilter":
         encoded_file = f"{base_path}_bf_encoded.tsv"
         if ENC_CONFIG["AliceDiffuse"]:
             encoded_file = f"{base_path}_bfd_encoded.tsv"
