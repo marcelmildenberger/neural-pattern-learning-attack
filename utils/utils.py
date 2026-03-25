@@ -31,6 +31,24 @@ keys_to_remove = [
     "node_ip", "time_since_restore", "iterations_since_restore", "timestamp"
 ]
 
+
+def _normalized_uid_column_name(column_name):
+    return "uid" if str(column_name).strip().lower() in {"uid", "id"} else column_name
+
+
+def _normalize_uid_header(header):
+    return [_normalized_uid_column_name(column_name) for column_name in header]
+
+
+def _normalize_uid_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    renamed = {
+        column_name: _normalized_uid_column_name(column_name)
+        for column_name in df.columns
+    }
+    if renamed == {column_name: column_name for column_name in df.columns}:
+        return df
+    return df.rename(columns=renamed)
+
 def get_cache_path(data_directory, identifier, alice_enc_hash, name="dataset"):
     os.makedirs(f"{data_directory}/cache", exist_ok=True)
     return os.path.join(data_directory, "cache", f"{name}_{identifier}_{alice_enc_hash}.pkl")
@@ -44,6 +62,7 @@ def read_tsv(path: str, skip_header: bool = True, as_dict: bool = False, delim: 
             header = next(reader)
         else:
             header = next(reader)
+        header = _normalize_uid_header(header)
         for row in reader:
             if as_dict:
                 assert len(row) == 3, "Dict mode only supports rows with two values + uid"
@@ -397,7 +416,8 @@ def save_nepal_runtime_log(
 
 def load_dataframe(path):
     data = hkl.load(path)
-    return pd.DataFrame(data[1:], columns=data[0])
+    df = pd.DataFrame(data[1:], columns=_normalize_uid_header(data[0]))
+    return _normalize_uid_dataframe(df)
 
 
 def read_header(tsv_path):
@@ -457,6 +477,7 @@ def create_synthetic_data_splits(GLOBAL_CONFIG, ENC_CONFIG, data_dir, alice_enc_
     print("Loading Dataset: " + encoded_file)
     # Load the encoded data
     data, uids, header = read_tsv(encoded_file, skip_header=True, as_dict=False)
+    header = _normalize_uid_header(header)
 
     # Reconstruct full data rows by re-attaching the uid as the last column.
     # This works for any dataset shape (with or without a birthday column).
