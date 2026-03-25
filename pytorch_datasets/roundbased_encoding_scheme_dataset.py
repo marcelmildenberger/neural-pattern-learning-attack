@@ -5,6 +5,7 @@ from torch.utils.data import Dataset
 
 class RoundBasedEncodingSchemeDataset(Dataset):
     def __init__(self, data, is_labeled=False, all_bi_grams=None, dev_mode=False):
+        self.uids, data = get_uid_series(data)
         self.isLabeled = is_labeled
         self.allTwoGrams = all_bi_grams
         self.devMode = dev_mode
@@ -13,7 +14,6 @@ class RoundBasedEncodingSchemeDataset(Dataset):
         self.bitStringTensors = data["encoded_vector"].apply(
             lambda row: bit_string_to_tensor(list(str(row)))
         )
-        self.uids = data["uid"]
 
         if self.isLabeled:
             self.labelTensors = data.apply(

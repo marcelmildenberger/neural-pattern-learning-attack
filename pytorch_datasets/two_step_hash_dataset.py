@@ -7,13 +7,13 @@ from torch.utils.data import Dataset
 
 class TwoStepHashDataset(Dataset):
     def __init__(self, data, is_labeled=False, all_integers=None, dev_mode=False, all_bi_grams=None):
+        self.uids, data = get_uid_series(data)
         self.isLabeled = is_labeled
         self.allIntegers = all_integers
         self.allTwoGrams = all_bi_grams
         self.devMode = dev_mode
 
         self.hashTensors = data['twostephash'].apply(lambda row: self.hash_list_to_tensor(self.parse_twostephash_string(row)))
-        self.uids = data['uid']
 
         if self.isLabeled:
             self.labelTensors = data.apply(lambda row: label_to_tensor(extract_bi_grams("".join(row.iloc[:-2].astype(str))), self.allTwoGrams),  axis=1)
@@ -53,5 +53,4 @@ class TwoStepHashDataset(Dataset):
                 index = self.allIntegers.index(val)
                 hash_array[index] = 1
         return torch.tensor(hash_array)
-
 

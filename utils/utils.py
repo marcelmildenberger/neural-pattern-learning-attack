@@ -596,7 +596,7 @@ def load_not_reidentified_data(data_directory, alice_enc_hash, identifier):
     cache_path = get_cache_path(data_directory, identifier, alice_enc_hash, name="not_reidentified")
     if os.path.exists(cache_path):
         with open(cache_path, 'rb') as f:
-            df_filtered = pickle.load(f)
+            df_filtered = _normalize_uid_dataframe(pickle.load(f))
         return df_filtered
     df_not_reidentified = load_dataframe(f"{data_directory}/available_to_eve/not_reidentified_individuals_{identifier}.h5")
     df_all = load_dataframe(f"{data_directory}/dev/alice_data_complete_with_encoding_{alice_enc_hash}.h5")
@@ -632,7 +632,7 @@ def create_identifier(df: pd.DataFrame, components):
     Returns:
         pd.DataFrame: DataFrame with 'uid' and 'identifier' columns.
     """
-    df = df.copy()
+    df = _normalize_uid_dataframe(df.copy())
     df["identifier"] = create_identifier_column_dynamic(df, components)
     return df[["uid", "identifier"]]
 

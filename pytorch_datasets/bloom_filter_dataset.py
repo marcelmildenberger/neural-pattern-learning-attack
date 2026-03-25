@@ -6,13 +6,13 @@ from torch.utils.data import Dataset
 
 class BloomFilterDataset(Dataset):
     def __init__(self, data, is_labeled=False, all_bi_grams=None, dev_mode=False, reversed=False):
+        self.uids, data = get_uid_series(data)
         self.isLabeled = is_labeled
         self.allTwoGrams = all_bi_grams
         self.devMode = dev_mode
         self.reveresed = reversed
 
         self.bitStringTensors = data['bloomfilter'].apply(lambda row: bit_string_to_tensor(list(row)))
-        self.uids = data['uid']
 
         if self.isLabeled:
             self.labelTensors = data.apply(lambda row: label_to_tensor(extract_bi_grams("".join(row.iloc[:-2].astype(str))), self.allTwoGrams), axis=1)
