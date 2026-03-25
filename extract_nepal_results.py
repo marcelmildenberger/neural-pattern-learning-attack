@@ -67,6 +67,9 @@ def extract_reidentification_info(results_dir, matching_technique=None):
         "TotalReidentifiedIndividuals": None,
         "TotalNotReidentifiedIndividuals": None,
     }
+    normalized_matching = str(matching_technique or "").strip().lower()
+    if normalized_matching in {"", "skip", "none", "dice_only"}:
+        return info
     if not results_dir.exists():
         return info
 
@@ -75,8 +78,8 @@ def extract_reidentification_info(results_dir, matching_technique=None):
         return info
 
     target_file = None
-    if matching_technique:
-        candidate = results_dir / f"summary_{matching_technique.lower()}.csv"
+    if normalized_matching:
+        candidate = results_dir / f"summary_{normalized_matching}.csv"
         if candidate.exists():
             target_file = candidate
     if target_file is None:

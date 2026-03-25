@@ -552,11 +552,19 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     if GLOBAL_CONFIG["BenchMode"]:
         start_refinement_and_reconstruction = time.time()
 
-    # header = read_header(GLOBAL_CONFIG["Data"])
-    
-    # df_not_reid_cached = get_not_reidentified_df(data_dir, identifier, alice_enc_hash=alice_enc_hash)
-
-    # run_reidentification_greedy(results, header, df_not_reid_cached, current_experiment_directory=current_experiment_directory)
+    matching_technique = str(NEPAL_CONFIG.get("MatchingTechnique") or "").strip().lower()
+    if matching_technique not in {"", "skip", "none", "dice_only"}:
+        header = read_header(GLOBAL_CONFIG["Data"])
+        df_not_reid_cached = get_not_reidentified_df(data_dir, identifier, alice_enc_hash=alice_enc_hash)
+        if matching_technique == "greedy":
+            run_reidentification_greedy(
+                results,
+                header,
+                df_not_reid_cached,
+                current_experiment_directory=current_experiment_directory,
+            )
+        else:
+            raise ValueError(f"Unsupported MatchingTechnique: {matching_technique}")
 
     # Stop timing the refinement and reconstruction.
     if GLOBAL_CONFIG["BenchMode"] and start_total is not None:
