@@ -1,3 +1,5 @@
+# For Docker, these versions are provided by the PyTorch base image and are
+# checked during image build. For native installs, install them from here.
 torch==2.2.0
 torchvision==0.17.0
 ipywidgets==8.1.0
@@ -27,6 +29,5 @@ primality~=0.0.6
 ray[tune]~=2.9.3
 optuna~=3.6.1
 tensorboard~=2.13.0
-seaborn
-networkx
+seaborn~=0.13.2
 pyarrow==14.0.1

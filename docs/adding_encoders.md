@@ -46,9 +46,17 @@ plaintext columns ...    encoded_column    uid
 
 ### 3. Add Dataset Encoding Support
 
-If the repository should generate encoded TSVs for the new encoder, add a constructor and CLI branch in `encode_datasets.py`.
+If the repository should generate encoded TSVs for the new encoder, add an encoding function and an `EncodingJob` entry in `encode_datasets.py`.
 
 The output must insert the encoded column immediately before `uid`, and the column name must match `EncoderSpec.column_name`.
+
+An encoding job declares:
+
+- `alias`: command-line encoder name for `--encoders`
+- `label`: short log label
+- `spec_alias`: registry entry to use for output suffix and column name
+- `encode`: function that returns rows with the encoded value before `uid`
+- `diffuse`: whether the job uses the encoder's diffused suffix, if defined
 
 ### 4. Consider GMA Mode
 

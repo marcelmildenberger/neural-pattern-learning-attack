@@ -20,6 +20,11 @@ The experiments were run on a virtual machine with the following specification:
 - 176 GB of RAM
 - 3 TB HDD space
 
+### Docker Environment
+
+The Docker image is based on `pytorch/pytorch:2.2.0-cuda11.8-cudnn8-runtime`, matching the pinned `torch==2.2.0` and `torchvision==0.17.0` versions in `requirements.txt`.
+The image build verifies those versions after dependency installation.
+
 ___
 ### Obtain Datasets
 Make sure that you have all required datasets in the  `./data` directory.
@@ -31,7 +36,12 @@ fakename_20k.tsv    fakename_50k.tsv    euro_person.tsv     titanic_full.tsv
 ```
 
 Remember to [prepare](../README.md) the dataset so it fits the correct file format.
-**Note:** To run the attack on a synthetic dataset, you need to provide an encoded version of the dataset for BF, TMH and TSH (see fakename datasets for reference) where the encoding is provided before the uid column. This is provided for all datasets mentioned above except for euro_person.
+**Note:** To run the attack on a synthetic dataset, you need to provide an encoded version of the dataset for BF, TMH and TSH where the encoding is provided before the uid column.
+Clean encoded FakeName files are not stored in the repository by default. Regenerate them with:
+
+``python3 encode_datasets.py --source-dir data/datasets --encoders bf tmh tsh``
+
+Use `--encoders bfd` as well if you want diffused Bloom filter files.
 
 The Euro Person dataset needs to be downloaded and prepared accordingly using the dataset provided here: [Download](https://wayback.archive-it.org/12090/20231229131836/http://ec.europa.eu/eurostat/cros/system/files/Transfer%20to%20Istat.zip)
 
@@ -59,6 +69,8 @@ Common options include `--train-size`, `--parallel-trials`, `--no-gpu`, `--max-r
 To run the same matrix on clean datasets instead of noisy encoded datasets:
 
 ``python3 experiment_setup.py --clean``
+
+If encoded inputs are missing, the runner reports the exact missing files and the `encode_datasets.py` command needed to regenerate them.
 
 To run GMA-NEPAL:
 

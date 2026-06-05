@@ -99,6 +99,11 @@ Additional information can be found in:
 - [Noisy datasets](docs/noisy_datasets.md)
 - [Adding encoders](docs/adding_encoders.md)
 - [Dataset publication strategy](docs/dataset_publication.md)
+- [Responsible use](docs/responsible_use.md)
+
+## Responsible Use
+
+NEPAL is a research artifact for evaluating re-identification risks in PPRL systems. Use it only on datasets and systems you are authorized to assess, and do not publish reconstructed identifiers from real individuals. See [Responsible Use](docs/responsible_use.md) for details.
 
 
 ## Citation

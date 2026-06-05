@@ -10,14 +10,12 @@ python encode_datasets.py --source-dir data/datasets --recursive
 
 import argparse
 import csv
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import Callable, Iterable, List, Sequence
 
-from graphMatching.encoders.bf_encoder import BFEncoder
-from graphMatching.encoders.tmh_encoder import TMHEncoder
-from graphMatching.encoders.tsh_encoder import TSHEncoder
 from utils.encoder_registry import encoded_dataset_suffixes, get_encoder_spec
-from utils.utils import read_tsv
+from utils.data_pipeline import read_tsv
 
 
 # Defaults mirror experiment_setup.py / nepal_config.json (Alice* values).
@@ -34,6 +32,25 @@ DEFAULT_TMH_ONE_BIT = True
 DEFAULT_TSH_NUM_HASH_FUNC = 10
 DEFAULT_TSH_NUM_HASH_COL = 1000
 DEFAULT_TSH_RAND_MODE = "PNG"
+
+
+@dataclass(frozen=True)
+class EncodingJob:
+    alias: str
+    label: str
+    spec_alias: str
+    encode: Callable[[List[List[str]], List[str], argparse.Namespace], Sequence[Sequence]]
+    diffuse: bool = False
+
+    def output_path(self, dataset_path: Path) -> Path:
+        spec = get_encoder_spec(self.spec_alias)
+        return Path(spec.encoded_path(str(dataset_path), diffuse=self.diffuse))
+
+    def output_header(self, source_header: Sequence[str]) -> list[str]:
+        spec = get_encoder_spec(self.spec_alias)
+        header = list(source_header)
+        header.insert(-1, spec.column_name)
+        return header
 
 
 def iter_plain_datasets(root: Path, recursive: bool) -> Iterable[Path]:
@@ -58,6 +75,8 @@ def write_tsv(header: Sequence[str], rows: Sequence[Sequence], out_path: Path) -
 
 
 def encode_with_bf(data: List[List[str]], uids: List[str], args: argparse.Namespace, diffusion=False, bf_t=10):
+    from graphMatching.encoders.bf_encoder import BFEncoder
+
     encoder = BFEncoder(
         args.secret,
         args.bf_length,
@@ -72,7 +91,13 @@ def encode_with_bf(data: List[List[str]], uids: List[str], args: argparse.Namesp
     return combined
 
 
+def encode_with_bfd(data: List[List[str]], uids: List[str], args: argparse.Namespace):
+    return encode_with_bf(data, uids, args, diffusion=True, bf_t=args.bf_t)
+
+
 def encode_with_tmh(data: List[List[str]], uids: List[str], args: argparse.Namespace):
+    from graphMatching.encoders.tmh_encoder import TMHEncoder
+
     encoder = TMHEncoder(
         args.tmh_num_hash,
         args.tmh_hash_bits,
@@ -88,6 +113,8 @@ def encode_with_tmh(data: List[List[str]], uids: List[str], args: argparse.Names
 
 
 def encode_with_tsh(data: List[List[str]], uids: List[str], args: argparse.Namespace):
+    from graphMatching.encoders.tsh_encoder import TSHEncoder
+
     encoder = TSHEncoder(
         args.tsh_num_hash_func,
         args.tsh_num_hash_col,
@@ -101,11 +128,19 @@ def encode_with_tsh(data: List[List[str]], uids: List[str], args: argparse.Names
     return combined
 
 
+ENCODING_JOBS = {
+    "bf": EncodingJob("bf", "BF", "bf", encode_with_bf),
+    "bfd": EncodingJob("bfd", "BFD", "bf", encode_with_bfd, diffuse=True),
+    "tmh": EncodingJob("tmh", "TMH", "tmh", encode_with_tmh),
+    "tsh": EncodingJob("tsh", "TSH", "tsh", encode_with_tsh),
+}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Encode all non-encoded datasets under data/datasets.")
     parser.add_argument("--source-dir", type=Path, default=Path("data/datasets"), help="Where to look for .tsv files.")
     parser.add_argument("--recursive", action="store_true", help="Recurse into subdirectories.")
-    parser.add_argument("--encoders", nargs="+", choices=["bf", "tmh", "tsh", "bfd"], default=["bf", "tmh", "tsh", "bfd"],
+    parser.add_argument("--encoders", nargs="+", choices=sorted(ENCODING_JOBS), default=["bf", "tmh", "tsh", "bfd"],
                         help="Which encoders to run.")
     parser.add_argument("--overwrite", action="store_true", help="Regenerate even if encoded files already exist.")
     parser.add_argument("--jobs", type=int, default=-1, help="Parallel workers for TMH/TSH (-1 = all cores).")
@@ -136,53 +171,15 @@ def main() -> None:
         data, uids, header = read_tsv(str(ds_path), skip_header=False)
         print(f"\nProcessing {ds_path}")
 
-        if "bf" in args.encoders:
-            bf_spec = get_encoder_spec("bf")
-            bf_out = Path(bf_spec.encoded_path(str(ds_path)))
-            if bf_out.exists() and not args.overwrite:
-                print(f"- Skipping BF (exists): {bf_out}")
-            else:
-                bf_rows = encode_with_bf(data, uids, args)
-                bf_header = list(header)
-                bf_header.insert(-1, bf_spec.column_name)
-                write_tsv(bf_header, bf_rows, bf_out)
-                print(f"- Wrote {bf_out}")
-        
-        if "bfd" in args.encoders:
-            bf_spec = get_encoder_spec("bf")
-            bfd_out = Path(bf_spec.encoded_path(str(ds_path), diffuse=True))
-            if bfd_out.exists() and not args.overwrite:
-                print(f"- Skipping BFD (exists): {bfd_out}")
-            else:
-                bfd_rows = encode_with_bf(data, uids, args, True, 10)
-                bfd_header = list(header)
-                bfd_header.insert(-1, bf_spec.column_name)
-                write_tsv(bfd_header, bfd_rows, bfd_out)
-                print(f"- Wrote {bfd_out}")
-
-        if "tmh" in args.encoders:
-            tmh_spec = get_encoder_spec("tmh")
-            tmh_out = Path(tmh_spec.encoded_path(str(ds_path)))
-            if tmh_out.exists() and not args.overwrite:
-                print(f"- Skipping TMH (exists): {tmh_out}")
-            else:
-                tmh_rows = encode_with_tmh(data, uids, args)
-                tmh_header = list(header)
-                tmh_header.insert(-1, tmh_spec.column_name)
-                write_tsv(tmh_header, tmh_rows, tmh_out)
-                print(f"- Wrote {tmh_out}")
-
-        if "tsh" in args.encoders:
-            tsh_spec = get_encoder_spec("tsh")
-            tsh_out = Path(tsh_spec.encoded_path(str(ds_path)))
-            if tsh_out.exists() and not args.overwrite:
-                print(f"- Skipping TSH (exists): {tsh_out}")
-            else:
-                tsh_rows = encode_with_tsh(data, uids, args)
-                tsh_header = list(header)
-                tsh_header.insert(-1, tsh_spec.column_name)
-                write_tsv(tsh_header, tsh_rows, tsh_out)
-                print(f"- Wrote {tsh_out}")
+        for alias in args.encoders:
+            job = ENCODING_JOBS[alias]
+            out_path = job.output_path(ds_path)
+            if out_path.exists() and not args.overwrite:
+                print(f"- Skipping {job.label} (exists): {out_path}")
+                continue
+            rows = job.encode(data, uids, args)
+            write_tsv(job.output_header(header), rows, out_path)
+            print(f"- Wrote {out_path}")
 
 
 if __name__ == "__main__":

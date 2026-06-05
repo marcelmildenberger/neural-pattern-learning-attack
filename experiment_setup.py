@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from utils.encoder_registry import get_encoder_spec, supported_nepal_encoders
+from utils.encoder_registry import encoded_dataset_path, get_encoder_spec, supported_nepal_encoders
 
 
 # === General Parameters ===
@@ -168,6 +168,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-gpu", action="store_true", help="Disable CUDA usage.")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose experiment output.")
     parser.add_argument("--dry-run", action="store_true", help="Print planned runs without executing them.")
+    parser.add_argument("--check-inputs", action="store_true", help="Check encoded input files during --dry-run.")
+    parser.add_argument("--skip-input-check", action="store_true", help="Skip encoded input preflight before execution.")
     parser.add_argument("--max-runs", type=int, default=None, help="Execute at most this many planned runs.")
     parser.add_argument("--failed-output", default="experiment_results/failed_experiments.csv")
     return parser.parse_args()
@@ -249,6 +251,76 @@ def build_configs(run, args):
     return global_config, enc_config, emb_config, align_config, nepal_config
 
 
+def encoder_generation_alias(run, args) -> str:
+    spec = get_encoder_spec(run["encoding"])
+    if spec.name == "BloomFilter" and args.bf_diffusion:
+        return "bfd"
+    return spec.cli_alias
+
+
+def expected_encoded_input(run, args) -> str:
+    return encoded_dataset_path(
+        run["data_path"],
+        run["encoding"],
+        diffuse=args.bf_diffusion and run["encoding"] == "BloomFilter",
+    )
+
+
+def missing_encoded_inputs(runs, args) -> list[dict[str, str]]:
+    missing = []
+    seen = set()
+    for run in runs:
+        encoded_path = expected_encoded_input(run, args)
+        if encoded_path in seen:
+            continue
+        seen.add(encoded_path)
+        if not Path(encoded_path).exists():
+            missing.append(
+                {
+                    "encoding": run["encoding"],
+                    "dataset": run["dataset"],
+                    "data_path": run["data_path"],
+                    "encoded_path": encoded_path,
+                    "alias": encoder_generation_alias(run, args),
+                }
+            )
+    return missing
+
+
+def raise_for_missing_encoded_inputs(runs, args) -> None:
+    missing = missing_encoded_inputs(runs, args)
+    if not missing:
+        return
+
+    preview = "\n".join(f"- {item['encoded_path']}" for item in missing[:12])
+    if len(missing) > 12:
+        preview += f"\n- ... and {len(missing) - 12} more"
+
+    aliases = " ".join(sorted({item["alias"] for item in missing}))
+    message = [
+        "Missing encoded input TSV files required for the planned NEPAL runs:",
+        preview,
+    ]
+    if args.clean:
+        message.extend(
+            [
+                "",
+                "Regenerate clean encoded datasets with:",
+                f"python3 encode_datasets.py --source-dir {args.data_dir} --encoders {aliases}",
+            ]
+        )
+    else:
+        message.extend(
+            [
+                "",
+                "The default noisy workflow expects noisy encoded TSV files.",
+                "If these are not present, regenerate clean encodings first and then run add_noise_and_swap_records.py,",
+                "or download the full noisy encoded artifact bundle.",
+            ]
+        )
+    raise SystemExit("\n".join(message))
+
+
 def main() -> int:
     args = parse_args()
     runs = list(planned_runs(args))
@@ -262,7 +334,12 @@ def main() -> int:
             print(label)
 
     if args.dry_run:
+        if args.check_inputs:
+            raise_for_missing_encoded_inputs(runs, args)
         return 0
+
+    if not args.skip_input_check:
+        raise_for_missing_encoded_inputs(runs, args)
 
     from nepal import run_nepal
 
