@@ -20,9 +20,9 @@ ___
 | TrainSize | Sets Training-Validation Split Ratio.            | 0.8       |
 | Patience | Patience Epochs for Early Stopping.                    | 5      |
 | MinDelta | Minimum improvement in the monitored metric required to reset early stopping patience. | 1e-4      |
-| NumSamples   | Amount of Hpyerparameter Optimization trials sampled from the search space.   | 125      |
+| NumSamples   | Amount of Hyperparameter Optimization trials sampled from the search space.   | 125      |
 | Epochs   | Maximum number of Epochs for Training.   | 25      |
-| MetricToOptimize   | Metric to optimize for in the Hyperparameter Optimization (avgerage_dice, average_precision, average_recall).   | "average_dice"      |
+| MetricToOptimize   | Metric to optimize for in the Hyperparameter Optimization (average_dice, average_precision, average_recall).   | "average_dice"      |
 | MatchingTechnique   | Reconstruction Strategy (greedy only option, further extensions possible).   | "greedy"      |
 
 ___
@@ -33,7 +33,7 @@ ___
 | Parameter Name | Description                                                                                                                                                                                     | Default                   |
 |----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------|
 | Data           | Dataset to run the attack on.                                                                                                                                                                   | "./data/titanic_full.tsv" |
-| Overlap        | If GMA enabled: The share of overlapping records between the attacker's and the victim's data. Must be >0 and <=1. If GMA is disabled: the randomly sampled training proportion from the dataset (syntethic datasplit)                                                                                     | 1                         |
+| Overlap        | If GMA enabled: The share of overlapping records between the attacker's and the victim's data. Must be >0 and <=1. If GMA is disabled: the randomly sampled training proportion from the dataset (synthetic data split)                                                                                     | 1                         |
 | DropFrom       | Which dataset should records be dropped from to achieve the desired overlap? One of "Eve" (Attacker), "Alice" (Victim) or "Both".                                                               | "Alice"                   |
 | DevMode        | If True, additional dev data is saved                                              | False                     |
 | BenchMode      | If True, the NEPAL attack is timed and duration of the attack is reported.                                          | True                     |
@@ -163,4 +163,3 @@ ___
 | Wasserstein    | If True, uses unsupervised Wasserstein Procrustes; otherwise uses supervised closed-form Procrustes.             | True                |
 
 ___
-

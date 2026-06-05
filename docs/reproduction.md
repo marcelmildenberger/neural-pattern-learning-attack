@@ -30,10 +30,12 @@ fakename_1k.tsv     fakename_2k.tsv     fakename_5k.tsv     fakename_10k.tsv
 fakename_20k.tsv    fakename_50k.tsv    euro_person.tsv     titanic_full.tsv
 ```
 
-Remember to [prepare](../readme.md) the dataset so it fits the correct file format.
-**Note:** To run the attack on a synthetic dataset, you need to provide an encoded version of the dataset for BF, TMH and TSH (see fakename datasets for reference) where the encoding is provided before the uid columng. This is provided for all datasets mentioned above except for euro_person.
+Remember to [prepare](../README.md) the dataset so it fits the correct file format.
+**Note:** To run the attack on a synthetic dataset, you need to provide an encoded version of the dataset for BF, TMH and TSH (see fakename datasets for reference) where the encoding is provided before the uid column. This is provided for all datasets mentioned above except for euro_person.
 
 The Euro Person dataset needs to be downloaded and prepared accordingly using the dataset provided here: [Download](https://wayback.archive-it.org/12090/20231229131836/http://ec.europa.eu/eurostat/cros/system/files/Transfer%20to%20Istat.zip)
+
+For smaller repository-friendly dataset bundles, see [Dataset Publication Strategy](dataset_publication.md).
 
 
 ___
@@ -42,7 +44,27 @@ To reproduce the results we reported in our paper, you may simply run
 
 ``python3 experiment_setup.py``
 
-**Note:** Per default snythetic created datasplits will be used. To enable the scenario GMA-NEPAL the Graph Matching Attack needs to be enabled (see [parameters.md](parameters.md))
+**Note:** By default, synthetically created data splits will be used. To enable the scenario GMA-NEPAL, the Graph Matching Attack needs to be enabled (see [parameters.md](parameters.md)).
+
+To inspect the full matrix without running it:
+
+``python3 experiment_setup.py --dry-run``
+
+To run a smaller custom matrix:
+
+``python3 experiment_setup.py --datasets fakename_1k.tsv fakename_5k.tsv --encoders bf tsh --overlaps 0.2 0.8 --num-samples 25 --epochs 10``
+
+Common options include `--train-size`, `--parallel-trials`, `--no-gpu`, `--max-runs`, and `--bf-diffusion`.
+
+To run the same matrix on clean datasets instead of noisy encoded datasets:
+
+``python3 experiment_setup.py --clean``
+
+To run GMA-NEPAL:
+
+``python3 experiment_setup.py --graph-matching --drop-from Eve Both``
+
+The CLI accepts encoder aliases (`bf`, `tmh`, `tsh`) and full encoder names (`BloomFilter`, `TabMinHash`, `TwoStepHash`).
 ___
 ### Reproduce Plots
 Once the benchmark is complete, you can generate the result plots used in our paper.
@@ -50,4 +72,4 @@ Simply generate the plots by running
 
 ``python3 extract_nepal_results.py``
 
-and then run the ``analysis.ipnb`` notebook
+and then run the ``analysis.ipynb`` notebook

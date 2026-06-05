@@ -14,13 +14,13 @@ The procedure operates at three levels:
 2. **Record-level permutations** (name swapping)
 3. **Encoding–plaintext mismatches** (encoding swaps)
 
-All probabilities are fixed and identical across datasets unless stated otherwise.
+The probabilities below are the default values and can be scaled with the `--noise-level` argument.
 ## Field-Level Noise Injection
 
 ### Name Fields (Given Name, Surname)
 
-For each name field, mutation types are evaluated **sequentially in the order listed below**.  
-Once a mutation is applied, **all subsequent mutation steps for that field are skipped**.
+For each name field, mutation types are evaluated independently in the order listed below.  
+Multiple mutations can therefore be applied to the same field.
 
 | Mutation Type | Probability | Description |
 |--------------|-------------|-------------|
@@ -66,8 +66,8 @@ Applying noise **after encoding** intentionally creates a conservative evaluatio
 
 ## Reproducibility
 
-- All mutation probabilities can be adjusted in [add_noise_and_swap_recordy.py](../add_noise_and_swap_records.py).
-- Noise injection is implemented in [add_noise_and_swap_recordy.py](../add_noise_and_swap_records.py).
+- All mutation probabilities can be adjusted in [add_noise_and_swap_records.py](../add_noise_and_swap_records.py).
+- Noise injection is implemented in [add_noise_and_swap_records.py](../add_noise_and_swap_records.py).
 - Random seeds can be set to ensure exact replication of experiments.
 
 For implementation details, refer to the corresponding source files in the repository.

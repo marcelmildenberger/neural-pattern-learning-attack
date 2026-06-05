@@ -145,10 +145,8 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         termination_df = pd.DataFrame(termination_data)
         termination_csv_path = os.path.join(current_experiment_directory, "termination_log.csv")
         termination_df.to_csv(termination_csv_path, index=False)
+        return 0
 
-        # Run hyperparameter optimization
-            
-            
     # Start timing the hyperparameter optimization run.
     if GLOBAL_CONFIG["BenchMode"]:
         start_hyperparameter_optimization = time.time()

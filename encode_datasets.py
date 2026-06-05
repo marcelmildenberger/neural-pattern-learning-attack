@@ -1,8 +1,8 @@
 """
 Batch-encode all non-encoded TSV datasets under data/datasets (and subfolders) using
 the same encoder settings used during the GMA runs. Produces *_bf_encoded.tsv,
-*_tmh_encoded.tsv and *_tsh_encoded.tsv files with the encoder column inserted
-right before the uid column.
+*_bfd_encoded.tsv, *_tmh_encoded.tsv and *_tsh_encoded.tsv files with the encoder
+column inserted right before the uid column.
 
 Example:
 python encode_datasets.py --source-dir data/datasets --recursive
@@ -16,6 +16,7 @@ from typing import Iterable, List, Sequence
 from graphMatching.encoders.bf_encoder import BFEncoder
 from graphMatching.encoders.tmh_encoder import TMHEncoder
 from graphMatching.encoders.tsh_encoder import TSHEncoder
+from utils.encoder_registry import encoded_dataset_suffixes, get_encoder_spec
 from utils.utils import read_tsv
 
 
@@ -37,9 +38,10 @@ DEFAULT_TSH_RAND_MODE = "PNG"
 
 def iter_plain_datasets(root: Path, recursive: bool) -> Iterable[Path]:
     pattern = "**/*.tsv" if recursive else "*.tsv"
+    encoded_suffixes = encoded_dataset_suffixes()
     for path in root.glob(pattern):
         name = path.name
-        if any(tag in name for tag in ("_bf_encoded", "_tmh_encoded", "_tsh_encoded", "_bfd_encoded")):
+        if name.endswith(encoded_suffixes):
             continue
         if name.endswith("_analysis.txt"):
             continue
@@ -135,46 +137,50 @@ def main() -> None:
         print(f"\nProcessing {ds_path}")
 
         if "bf" in args.encoders:
-            bf_out = ds_path.with_name(ds_path.stem + "_bf_encoded.tsv")
+            bf_spec = get_encoder_spec("bf")
+            bf_out = Path(bf_spec.encoded_path(str(ds_path)))
             if bf_out.exists() and not args.overwrite:
                 print(f"- Skipping BF (exists): {bf_out}")
             else:
                 bf_rows = encode_with_bf(data, uids, args)
                 bf_header = list(header)
-                bf_header.insert(-1, "bloomfilter")
+                bf_header.insert(-1, bf_spec.column_name)
                 write_tsv(bf_header, bf_rows, bf_out)
                 print(f"- Wrote {bf_out}")
         
         if "bfd" in args.encoders:
-            bfd_out = ds_path.with_name(ds_path.stem + "_bfd_encoded.tsv")
+            bf_spec = get_encoder_spec("bf")
+            bfd_out = Path(bf_spec.encoded_path(str(ds_path), diffuse=True))
             if bfd_out.exists() and not args.overwrite:
                 print(f"- Skipping BFD (exists): {bfd_out}")
             else:
                 bfd_rows = encode_with_bf(data, uids, args, True, 10)
                 bfd_header = list(header)
-                bfd_header.insert(-1, "bloomfilter")
+                bfd_header.insert(-1, bf_spec.column_name)
                 write_tsv(bfd_header, bfd_rows, bfd_out)
                 print(f"- Wrote {bfd_out}")
 
         if "tmh" in args.encoders:
-            tmh_out = ds_path.with_name(ds_path.stem + "_tmh_encoded.tsv")
+            tmh_spec = get_encoder_spec("tmh")
+            tmh_out = Path(tmh_spec.encoded_path(str(ds_path)))
             if tmh_out.exists() and not args.overwrite:
                 print(f"- Skipping TMH (exists): {tmh_out}")
             else:
                 tmh_rows = encode_with_tmh(data, uids, args)
                 tmh_header = list(header)
-                tmh_header.insert(-1, "tabminhash")
+                tmh_header.insert(-1, tmh_spec.column_name)
                 write_tsv(tmh_header, tmh_rows, tmh_out)
                 print(f"- Wrote {tmh_out}")
 
         if "tsh" in args.encoders:
-            tsh_out = ds_path.with_name(ds_path.stem + "_tsh_encoded.tsv")
+            tsh_spec = get_encoder_spec("tsh")
+            tsh_out = Path(tsh_spec.encoded_path(str(ds_path)))
             if tsh_out.exists() and not args.overwrite:
                 print(f"- Skipping TSH (exists): {tsh_out}")
             else:
                 tsh_rows = encode_with_tsh(data, uids, args)
                 tsh_header = list(header)
-                tsh_header.insert(-1, "twostephash")
+                tsh_header.insert(-1, tsh_spec.column_name)
                 write_tsv(tsh_header, tsh_rows, tsh_out)
                 print(f"- Wrote {tsh_out}")
 

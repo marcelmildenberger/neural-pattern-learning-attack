@@ -14,7 +14,7 @@ The attack consists of two major stages:
 1. **Pattern Mining** – A neural model learns mappings between encodings and their constituent *q-grams* (substrings of the original identifiers). This is framed as a multi-label classification task.
 2. **Plaintext Reconstruction** – The predicted q-grams are assembled into complete identifiers using a graph-based reconstruction algorithm.
 
-For a detailed description of the attacker model, theoretical background, and evaluation results, see the paper <placeholder>.
+For a detailed description of the attacker model, theoretical background, and evaluation results, see [NEPAL.pdf](NEPAL.pdf).
 
 
 ## Getting Started with Docker
@@ -50,7 +50,7 @@ Results are written to the [experiment_results](experiment_results) directory.
 See [docs/parameters.md](docs/parameters.md) for a detailed explanation of configuration options and schema.
 
 ## Prepare your Dataset
-The code expects a tab-separated file with one record per row. The fist row must be a 
+The code expects a tab-separated file with one record per row. The first row must be a 
 header specifying the column names. 
 Internally, the values stored in the columns are concatenated according to column ordering and normalized (switch to lowercase, remove whitespace and missing values).
 **The last column must contain a unique ID.**
@@ -71,7 +71,7 @@ This script runs multiple configurations automatically to produce results as in 
 
 ## Analysis and Evaluation
 
-The analysis notebook [analysis.ipnb](analysis.ipnb) reproduce the figures reported in the paper.
+The analysis notebook [analysis.ipynb](analysis.ipynb) reproduces the figures reported in the paper.
 Open the notebook and ensure that the output file from [extract_nepal_results.py](extract_nepal_results.py) is generated correctly.
 [extract_nepal_results.py](extract_nepal_results.py) uses the results produced in [experiment_results](experiment_results)
 
@@ -92,14 +92,18 @@ Bloom Filters (BF), Two-Step Hashing (TSH), and Tabulation MinHash (TMH).
 
 ## Additional Documentation
 
-Additional Information about Noisy Datasets, Parameters and Reproduction can be found in [docs](docs)
+Additional information can be found in:
+
+- [Reproduction](docs/reproduction.md)
+- [Parameters](docs/parameters.md)
+- [Noisy datasets](docs/noisy_datasets.md)
+- [Adding encoders](docs/adding_encoders.md)
+- [Dataset publication strategy](docs/dataset_publication.md)
 
 
 ## Citation
 
-If you use this repository or reproduce results from the NEPAL paper, please cite:
-
-(TBD)
+If you use this repository or reproduce results from the NEPAL paper, please cite the paper included as [NEPAL.pdf](NEPAL.pdf).
 
 
 ## Contact

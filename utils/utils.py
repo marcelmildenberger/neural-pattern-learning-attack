@@ -15,10 +15,8 @@ import torch
 from tqdm import tqdm
 import pickle
 from torch.utils.data import random_split, Subset
-from pytorch_datasets.bloom_filter_dataset import BloomFilterDataset
-from pytorch_datasets.tab_min_hash_dataset import TabMinHashDataset
-from pytorch_datasets.two_step_hash_dataset import TwoStepHashDataset
 import seaborn as sns
+from utils.encoder_registry import encoded_dataset_path, get_encoder_spec
 from utils.string_utils import *
 import random
 
@@ -426,20 +424,12 @@ def create_synthetic_data_splits(GLOBAL_CONFIG, ENC_CONFIG, data_dir, alice_enc_
 
     # Load the encoded dataset
     data_path = GLOBAL_CONFIG["Data"]          # e.g. "./data/datasets/noisy/fakename_1k.tsv"
-    base_path, _ = os.path.splitext(data_path) # "./data/datasets/noisy/fakename_1k"
 
-    algo = ENC_CONFIG["AliceAlgo"]
-
-    if algo == "BloomFilter":
-        encoded_file = f"{base_path}_bf_encoded.tsv"
-        if ENC_CONFIG["AliceDiffuse"]:
-            encoded_file = f"{base_path}_bfd_encoded.tsv"
-    elif algo == "TabMinHash":
-        encoded_file = f"{base_path}_tmh_encoded.tsv"
-    elif algo == "TwoStepHash":
-        encoded_file = f"{base_path}_tsh_encoded.tsv"
-    else:
-        raise ValueError(f"Unsupported encoding algorithm: {algo}")
+    encoded_file = encoded_dataset_path(
+        data_path,
+        ENC_CONFIG["AliceAlgo"],
+        diffuse=ENC_CONFIG.get("AliceDiffuse", False),
+    )
 
     if not os.path.isfile(encoded_file):
         raise FileNotFoundError(f"Encoded dataset not found: {encoded_file}")
@@ -502,16 +492,10 @@ def load_experiment_datasets(
     df_all = load_dataframe(f"{data_directory}/dev/alice_data_complete_with_encoding_{alice_enc_hash}.h5")
     df_test = df_all[df_all["uid"].isin(df_not_reidentified["uid"])].reset_index(drop=True)
 
-    DatasetClass = None
-    algo = ENC_CONFIG["AliceAlgo"]
-    if algo == "BloomFilter":
-        DatasetClass = BloomFilterDataset
-    elif algo == "TabMinHash":
-        DatasetClass = TabMinHashDataset
-    elif algo == "TwoStepHash":
-        DatasetClass = TwoStepHashDataset
+    encoder_spec = get_encoder_spec(ENC_CONFIG["AliceAlgo"])
+    DatasetClass = encoder_spec.load_dataset_class()
 
-    if ENC_CONFIG["AliceAlgo"] == "TwoStepHash":
+    if encoder_spec.needs_integer_vocabulary:
         # Calculate unique integers from the complete dataset to ensure consistent tensor dimensions
         # Using df_all ensures we capture all possible hash values that could appear in any subset
         
@@ -532,7 +516,7 @@ def load_experiment_datasets(
         
         # Extract all unique integers from all twostephash entries
         all_ints = []
-        for twostephash_entry in df_all["twostephash"]:
+        for twostephash_entry in df_all[encoder_spec.column_name]:
             all_ints.extend(parse_twostephash_string(twostephash_entry))
         
         unique_ints = sorted(set(all_ints))
@@ -688,4 +672,3 @@ def plot_metric_distributions(results_df, trained_model_directory, save=False):
         out_path = os.path.join(trained_model_directory, "metric_distributions.png")
         plt.savefig(out_path)
     plt.close()
-
