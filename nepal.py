@@ -114,7 +114,8 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     
     # Current NEPAL implementation only supports Two-Gram encoding but can be extended in the future.
     # Generate all possible two-character combinations (2-grams) from lowercase letters and digits.
-    # This includes letter-letter, letter-digit, and digit-digit pairs.
+    # This includes every ordered pair over the alphanumeric alphabet, including
+    # letter-letter, letter-digit, digit-letter, and digit-digit pairs.
     # The resulting list `all_bi_grams` is used for encoding/decoding tasks,
     # and `bi_gram_dict` maps each index to its corresponding 2-gram.
     all_bi_grams = get_all_bi_grams()
