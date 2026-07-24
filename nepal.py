@@ -4,6 +4,8 @@ import os
 import time
 from datetime import datetime
 from functools import partial
+from pathlib import Path
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -21,6 +23,8 @@ import ray
 from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
+import optuna
+from nepal.campaign_support import seed_nepal_runtime
 
 
 def _resolve_worker_count(configured_workers):
@@ -51,10 +55,61 @@ def _dataloader_kwargs(num_workers: int, use_gpu: bool) -> dict:
     return kwargs
 
 
-def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG):
+def tune_nepal_config(
+    GLOBAL_CONFIG,
+    ENC_CONFIG,
+    EMB_CONFIG,
+    ALIGN_CONFIG,
+    NEPAL_CONFIG,
+    *,
+    random_seed=None,
+    output_dir=None,
+):
+    """Tune once and return a JSON-serializable model configuration.
+
+    This is the experiment-suite entry point for the prespecified tune-then-
+    freeze PMA protocol.  It shares preprocessing and HPO behavior with
+    ``run_nepal`` but exits before final-model training or test evaluation.
+    """
+
+    result = run_nepal(
+        GLOBAL_CONFIG,
+        ENC_CONFIG,
+        EMB_CONFIG,
+        ALIGN_CONFIG,
+        NEPAL_CONFIG,
+        random_seed=random_seed,
+        output_dir=output_dir,
+        _tune_only=True,
+    )
+    if not isinstance(result, dict):
+        raise TypeError("PMA tuning did not return a model configuration")
+    return result
+
+
+def run_nepal(
+    GLOBAL_CONFIG,
+    ENC_CONFIG,
+    EMB_CONFIG,
+    ALIGN_CONFIG,
+    NEPAL_CONFIG,
+    *,
+    fixed_model_config=None,
+    random_seed=None,
+    output_dir=None,
+    _tune_only=False,
+):
     """
     Main experiment entry point for running NEPAL
     """
+    resolved_seed = int(
+        GLOBAL_CONFIG.get("RandomSeed", 42)
+        if random_seed is None
+        else random_seed
+    )
+    seed_nepal_runtime(resolved_seed)
+    GLOBAL_CONFIG["RandomSeed"] = resolved_seed
+
     # Ignore optuna warnings.
     warnings.filterwarnings("ignore", category=UserWarning, module="optuna")
     # Set default values for alignment and global configuration.
@@ -90,7 +145,12 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     # All configuration dictionaries are saved to a config.txt file in this directory for reproducibility.
     selected_dataset = GLOBAL_CONFIG["Data"].split("/")[-1].replace(".tsv", "")
     experiment_tag = "experiment_" + ENC_CONFIG["AliceAlgo"] + "_" + selected_dataset + "_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    current_experiment_directory = f"experiment_results/{experiment_tag}"
+    configured_output = output_dir or GLOBAL_CONFIG.get("OutputDir")
+    current_experiment_directory = (
+        str(Path(configured_output))
+        if configured_output
+        else f"experiment_results/{experiment_tag}"
+    )
     os.makedirs(current_experiment_directory, exist_ok=True)
 
     all_configs = {
@@ -100,6 +160,8 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         "EMB_CONFIG": EMB_CONFIG,
         "ALIGN_CONFIG": ALIGN_CONFIG
     }
+    if fixed_model_config is not None:
+        all_configs["FIXED_MODEL_CONFIG"] = fixed_model_config
     
     with open(os.path.join(current_experiment_directory, "config.json"), "w") as f:
         json.dump(all_configs, f, indent=4)
@@ -138,7 +200,8 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     data_dir = os.path.abspath("./data")
     suffix = "" if gma_enabled else "_synthetic"
     noisy = "_noisy" if GLOBAL_CONFIG["UseNoisyDatasets"] else ""
-    alice_enc_hash = alice_enc_hash + suffix + noisy
+    seed_suffix = "" if gma_enabled else f"_seed{resolved_seed}"
+    alice_enc_hash = alice_enc_hash + suffix + noisy + seed_suffix
     identifier = f"{eve_enc_hash}_{alice_enc_hash}_{eve_emb_hash}_{alice_emb_hash}"
     path_reidentified = f"{data_dir}/available_to_eve/reidentified_individuals_{identifier}.h5"
     path_not_reidentified = f"{data_dir}/available_to_eve/not_reidentified_individuals_{identifier}.h5"
@@ -179,109 +242,104 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         # Run hyperparameter optimization
             
             
-    # Start timing the hyperparameter optimization run.
-    if GLOBAL_CONFIG["BenchMode"]:
-        start_hyperparameter_optimization = time.time()
-
-    search_space = {
-        "output_dim": len(all_bi_grams),
-        "num_layers": tune.randint(1, 3),
-        "hidden_layer": tune.choice([512, 1024, 2048, 4096]),
-        "dropout_rate": tune.uniform(0.1, 0.4),
-        "activation_fn": tune.choice(["elu", "selu", "tanh"]),
-        "optimizer": tune.choice([
-            {"name": "Adam", "lr": tune.loguniform(1e-5, 1e-3)},
-            {"name": "AdamW", "lr": tune.loguniform(1e-5, 1e-3)},
-            {"name": "RMSprop", "lr": tune.loguniform(1e-5, 1e-3)},
-        ]),
-        "loss_fn": tune.choice(["BCEWithLogitsLoss", "MultiLabelSoftMarginLoss", "SoftMarginLoss"]),
-        "threshold": tune.uniform(0.2, 0.7),
-        "lr_scheduler": tune.choice([
-            {"name": "ReduceLROnPlateau", "mode": "min", "factor": tune.uniform(0.1, 0.5), "patience": tune.choice([5, 10, 15])},
-            {"name": "CosineAnnealingLR", "T_max": tune.loguniform(10, 50), "eta_min": tune.choice([1e-5, 1e-6, 0])},
-            {"name": "CyclicLR", "base_lr": tune.loguniform(1e-5, 1e-3), "max_lr": tune.loguniform(1e-3, 1e-1), "step_size_up": tune.choice([2000, 4000]), "mode_cyclic": tune.choice(["triangular", "triangular2", "exp_range"]) },
-            {"name": "None"}
-        ]),
-        "batch_size": tune.choice([8, 16, 32, 64]),
-    }
-
-    # Initialize Ray for hyperparameter optimization.
-    ray.init(
-        num_cpus=GLOBAL_CONFIG["Workers"],
-        num_gpus=gpu_count if use_gpu else 0,
-        ignore_reinit_error=True,
-        logging_level="ERROR"
-    )
-
-    # Initialize the Optuna search and the ASHAScheduler.
-    optuna_search = OptunaSearch(metric=NEPAL_CONFIG["MetricToOptimize"], mode="max")
-    scheduler = ASHAScheduler(metric="total_val_loss", mode="min")
-
-    # Calculate resources per trial based on parallel trials and available resources
-    cpu_per_trial = max(1, GLOBAL_CONFIG["Workers"] // parallel_trials)
-    gpu_per_trial = (gpu_count / parallel_trials) if use_gpu and gpu_count > 0 else 0
-    loader_workers_per_trial = _recommended_loader_workers(
-        cpu_per_trial,
-        parallel_trials=1,
-        use_gpu=use_gpu,
-    )
-
-    # Define the trainable function.
-    trainable = partial(
-        hyperparameter_training,
-        data_dir=data_dir,
-        output_dim=len(all_bi_grams),
-        alice_enc_hash=alice_enc_hash,
-        identifier=identifier,
-        patience=NEPAL_CONFIG["Patience"],
-        min_delta=NEPAL_CONFIG["MinDelta"],
-        workers=loader_workers_per_trial,
-        ENC_CONFIG=ENC_CONFIG,
-        NEPAL_CONFIG=NEPAL_CONFIG,
-        GLOBAL_CONFIG=GLOBAL_CONFIG,
-        bi_gram_dict=bi_gram_dict,
-        all_bi_grams=all_bi_grams
-    )
-    
-    # Wrap the trainable function with resources
-    trainable_with_resources = tune.with_resources(
-        trainable,
-        resources={"cpu": cpu_per_trial, "gpu": gpu_per_trial}
-    )
-
-    tuner = tune.Tuner(
-        trainable_with_resources,
-        tune_config=tune.TuneConfig(
-            search_alg=optuna_search,
-            scheduler=scheduler,
-            num_samples=NEPAL_CONFIG["NumSamples"],
-        ),
-        param_space=search_space,
-        run_config=ray.tune.RunConfig(
-            name="nepal_hpo",
-        ),
-    )
-
-    # Run the hyperparameter optimization.
-    results = tuner.fit()
-
-    # Shut down Ray.
-    ray.shutdown()
-
-    # Stop timing the hyperparameter optimization.
-    if GLOBAL_CONFIG["BenchMode"] and start_hyperparameter_optimization is not None:
-        elapsed_hyperparameter_optimization = time.time() - start_hyperparameter_optimization
-
-    # Save the results of hyperparameter optimization to a CSV file and a plot.
     hyperparameter_optimization_directory = f"{current_experiment_directory}/hyperparameteroptimization"
     os.makedirs(hyperparameter_optimization_directory, exist_ok=True)
+    if fixed_model_config is None:
+        # Start timing the hyperparameter optimization run.
+        if GLOBAL_CONFIG["BenchMode"]:
+            start_hyperparameter_optimization = time.time()
 
-    # Get the best result.
-    best_result = results.get_best_result(metric=NEPAL_CONFIG["MetricToOptimize"], mode="max")
-    if GLOBAL_CONFIG["SaveResults"]:
-        print_and_save_result("best_result", best_result, hyperparameter_optimization_directory)
+        search_space = {
+            "output_dim": len(all_bi_grams),
+            "num_layers": tune.randint(1, 3),
+            "hidden_layer": tune.choice([512, 1024, 2048, 4096]),
+            "dropout_rate": tune.uniform(0.1, 0.4),
+            "activation_fn": tune.choice(["elu", "selu", "tanh"]),
+            "optimizer": tune.choice([
+                {"name": "Adam", "lr": tune.loguniform(1e-5, 1e-3)},
+                {"name": "AdamW", "lr": tune.loguniform(1e-5, 1e-3)},
+                {"name": "RMSprop", "lr": tune.loguniform(1e-5, 1e-3)},
+            ]),
+            "loss_fn": tune.choice(["BCEWithLogitsLoss", "MultiLabelSoftMarginLoss", "SoftMarginLoss"]),
+            "threshold": tune.uniform(0.2, 0.7),
+            "lr_scheduler": tune.choice([
+                {"name": "ReduceLROnPlateau", "mode": "min", "factor": tune.uniform(0.1, 0.5), "patience": tune.choice([5, 10, 15])},
+                {"name": "CosineAnnealingLR", "T_max": tune.loguniform(10, 50), "eta_min": tune.choice([1e-5, 1e-6, 0])},
+                {"name": "CyclicLR", "base_lr": tune.loguniform(1e-5, 1e-3), "max_lr": tune.loguniform(1e-3, 1e-1), "step_size_up": tune.choice([2000, 4000]), "mode_cyclic": tune.choice(["triangular", "triangular2", "exp_range"]) },
+                {"name": "None"}
+            ]),
+            "batch_size": tune.choice([8, 16, 32, 64]),
+        }
 
-    best_config = resolve_config(best_result.config)
+        ray.init(
+            num_cpus=GLOBAL_CONFIG["Workers"],
+            num_gpus=gpu_count if use_gpu else 0,
+            ignore_reinit_error=True,
+            logging_level="ERROR"
+        )
+        optuna_search = OptunaSearch(
+            sampler=optuna.samplers.TPESampler(seed=resolved_seed),
+            metric=NEPAL_CONFIG["MetricToOptimize"],
+            mode="max",
+        )
+        scheduler = ASHAScheduler(metric="total_val_loss", mode="min")
+        cpu_per_trial = max(1, GLOBAL_CONFIG["Workers"] // parallel_trials)
+        gpu_per_trial = (gpu_count / parallel_trials) if use_gpu and gpu_count > 0 else 0
+        loader_workers_per_trial = _recommended_loader_workers(
+            cpu_per_trial,
+            parallel_trials=1,
+            use_gpu=use_gpu,
+        )
+        trainable = partial(
+            hyperparameter_training,
+            data_dir=data_dir,
+            output_dim=len(all_bi_grams),
+            alice_enc_hash=alice_enc_hash,
+            identifier=identifier,
+            patience=NEPAL_CONFIG["Patience"],
+            min_delta=NEPAL_CONFIG["MinDelta"],
+            workers=loader_workers_per_trial,
+            ENC_CONFIG=ENC_CONFIG,
+            NEPAL_CONFIG=NEPAL_CONFIG,
+            GLOBAL_CONFIG=GLOBAL_CONFIG,
+            bi_gram_dict=bi_gram_dict,
+            all_bi_grams=all_bi_grams
+        )
+        trainable_with_resources = tune.with_resources(
+            trainable,
+            resources={"cpu": cpu_per_trial, "gpu": gpu_per_trial}
+        )
+        tuner = tune.Tuner(
+            trainable_with_resources,
+            tune_config=tune.TuneConfig(
+                search_alg=optuna_search,
+                scheduler=scheduler,
+                num_samples=NEPAL_CONFIG["NumSamples"],
+            ),
+            param_space=search_space,
+            run_config=ray.tune.RunConfig(
+                name="nepal_hpo",
+                storage_path=str(Path(current_experiment_directory) / "ray"),
+            ),
+        )
+        try:
+            results = tuner.fit()
+        finally:
+            ray.shutdown()
+
+        if GLOBAL_CONFIG["BenchMode"] and start_hyperparameter_optimization is not None:
+            elapsed_hyperparameter_optimization = time.time() - start_hyperparameter_optimization
+        best_result = results.get_best_result(metric=NEPAL_CONFIG["MetricToOptimize"], mode="max")
+        if GLOBAL_CONFIG["SaveResults"]:
+            print_and_save_result("best_result", best_result, hyperparameter_optimization_directory)
+        best_config = resolve_config(best_result.config)
+    else:
+        best_config = resolve_config(copy.deepcopy(dict(fixed_model_config)))
+
+    with open(os.path.join(hyperparameter_optimization_directory, "frozen_model_config.json"), "w") as f:
+        json.dump(best_config, f, indent=4, sort_keys=True)
+    if _tune_only:
+        return best_config
 
     # Start timing the model training.
     if GLOBAL_CONFIG["BenchMode"]:
