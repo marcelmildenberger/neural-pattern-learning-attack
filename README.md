@@ -1,7 +1,8 @@
 # Neural Pattern Learning (NEPAL) Attack
 
-This repository accompanies the paper **“NEPAL: Climbing Toward the Peak of Re-Identification in Privacy-Preserving Record Linkage”**, which introduces the **Neural Pattern Learning (NEPAL) Attack**.  
-It provides documentation and resources for reproducing the experiments and analyses presented in the paper.
+This repository accompanies the published paper **[“NEPAL: Climbing Beyond the Limits of Graph Matching Attacks in Privacy-Preserving Record Linkage”](https://doi.org/10.1007/978-3-032-32575-4_4)**, which introduces the **Neural Pattern Learning (NEPAL) Attack**. The paper appears in the proceedings of the **24th International Conference on Applied Cryptography and Network Security (ACNS 2026)**, Part II, Lecture Notes in Computer Science (LNCS), volume 16572, pages 84–104.
+
+This repository provides documentation and resources for reproducing the experiments and analyses presented in the paper.
 
 
 ## Project Overview
@@ -14,7 +15,7 @@ The attack consists of two major stages:
 1. **Pattern Mining** – A neural model learns mappings between encodings and their constituent *q-grams* (substrings of the original identifiers). This is framed as a multi-label classification task.
 2. **Plaintext Reconstruction** – The predicted q-grams are assembled into complete identifiers using a graph-based reconstruction algorithm.
 
-For a detailed description of the attacker model, theoretical background, and evaluation results, see [NEPAL.pdf](NEPAL.pdf).
+For a detailed description of the attacker model, theoretical background, and evaluation results, see the [published paper on Springer Nature](https://doi.org/10.1007/978-3-032-32575-4_4).
 
 
 ## Getting Started with Docker
@@ -108,7 +109,22 @@ NEPAL is a research artifact for evaluating re-identification risks in PPRL syst
 
 ## Citation
 
-If you use this repository or reproduce results from the NEPAL paper, please cite the paper included as [NEPAL.pdf](NEPAL.pdf).
+If you use this repository or reproduce results from NEPAL, please cite the [published paper](https://doi.org/10.1007/978-3-032-32575-4_4):
+
+```bibtex
+@inproceedings{mildenberger2026nepal,
+  title        = {NEPAL: Climbing Beyond the Limits of Graph Matching Attacks in Privacy-Preserving Record Linkage},
+  author       = {Mildenberger, Marcel and Sch{\"a}fer, Jochen and Armknecht, Frederik},
+  booktitle    = {Applied Cryptography and Network Security: 24th International Conference, ACNS 2026, Stony Brook, NY, USA, June 22--25, 2026, Proceedings, Part II},
+  pages        = {84--104},
+  organization = {Springer Nature},
+  year         = {2026},
+  doi          = {10.1007/978-3-032-32575-4_4},
+  url          = {https://doi.org/10.1007/978-3-032-32575-4_4}
+}
+```
+
+The same entry is available in [`CITATION.bib`](CITATION.bib).
 
 
 ## Contact
