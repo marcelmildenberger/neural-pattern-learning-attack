@@ -20,4 +20,3 @@ analysis/
 !/analysis/tables/ignore_me
 formatted_results.csv
 venv
-/rse-for-pprl/
