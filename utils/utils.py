@@ -60,49 +60,31 @@ def save_tsv(data, path: str, delim: str = "\t", mode="w", write_header: bool = 
 
 
 def get_hashes(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG):
-     # Compute hashes of configuration to store/load data and thus avoid redundant computations.
-    # Using MD5 because Python's native hash() is not stable across processes
-    if GLOBAL_CONFIG["DropFrom"] == "Alice":
+    """Compute stable, seed-aware cache keys for both experiment parties."""
+    drop_from = GLOBAL_CONFIG["DropFrom"]
+    overlap = GLOBAL_CONFIG["Overlap"]
+    common = {
+        "encoding": ENC_CONFIG,
+        "data": GLOBAL_CONFIG["Data"],
+        "drop_from": drop_from,
+        "seed": int(GLOBAL_CONFIG.get("Seed", 42)),
+    }
 
-        eve_enc_hash = md5(
-            ("%s-%s-DropAlice" % (str(ENC_CONFIG), GLOBAL_CONFIG["Data"])).encode()).hexdigest()
-        alice_enc_hash = md5(
-            ("%s-%s-%s-DropAlice" % (str(ENC_CONFIG), GLOBAL_CONFIG["Data"],
-                                     GLOBAL_CONFIG["Overlap"])).encode()).hexdigest()
+    def stable_hash(payload):
+        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return md5(serialized.encode()).hexdigest()
 
-        eve_emb_hash = md5(
-            ("%s-%s-%s-DropAlice" % (str(EMB_CONFIG), str(ENC_CONFIG), GLOBAL_CONFIG["Data"])).encode()).hexdigest()
+    eve_scope = {**common, "party": "Eve"}
+    alice_scope = {**common, "party": "Alice"}
+    if drop_from in {"Eve", "Both"}:
+        eve_scope["overlap"] = overlap
+    if drop_from in {"Alice", "Both"}:
+        alice_scope["overlap"] = overlap
 
-        alice_emb_hash = md5(("%s-%s-%s-%s-DropAlice" % (str(EMB_CONFIG), str(ENC_CONFIG), GLOBAL_CONFIG["Data"],
-                                                         GLOBAL_CONFIG["Overlap"])).encode()).hexdigest()
-    elif GLOBAL_CONFIG["DropFrom"] == "Eve":
-
-        eve_enc_hash = md5(
-            ("%s-%s-%s-DropEve" % (str(ENC_CONFIG), GLOBAL_CONFIG["Data"],
-                                   GLOBAL_CONFIG["Overlap"])).encode()).hexdigest()
-
-        alice_enc_hash = md5(("%s-%s-DropEve" % (str(ENC_CONFIG), GLOBAL_CONFIG["Data"])).encode()).hexdigest()
-
-        eve_emb_hash = md5(("%s-%s-%s-%s-DropEve" % (str(EMB_CONFIG), str(ENC_CONFIG), GLOBAL_CONFIG["Data"],
-                                                     GLOBAL_CONFIG["Overlap"])).encode()).hexdigest()
-
-        alice_emb_hash = md5(("%s-%s-%s-DropEve" % (str(EMB_CONFIG), str(ENC_CONFIG),
-                                                    GLOBAL_CONFIG["Data"])).encode()).hexdigest()
-    else:
-        eve_enc_hash = md5(
-            ("%s-%s-%s-DropBoth" % (str(ENC_CONFIG), GLOBAL_CONFIG["Data"],
-                                    GLOBAL_CONFIG["Overlap"])).encode()).hexdigest()
-
-        alice_enc_hash = md5(
-            ("%s-%s-%s-DropBoth" % (str(ENC_CONFIG), GLOBAL_CONFIG["Data"],
-                                    GLOBAL_CONFIG["Overlap"])).encode()).hexdigest()
-
-        eve_emb_hash = md5(("%s-%s-%s-%s-DropBoth" % (str(EMB_CONFIG), str(ENC_CONFIG), GLOBAL_CONFIG["Data"],
-                                                      GLOBAL_CONFIG["Overlap"])).encode()).hexdigest()
-
-        alice_emb_hash = md5(("%s-%s-%s-%s-DropBoth" % (str(EMB_CONFIG), str(ENC_CONFIG), GLOBAL_CONFIG["Data"],
-                                                        GLOBAL_CONFIG["Overlap"])).encode()).hexdigest()
-
+    eve_enc_hash = stable_hash(eve_scope)
+    alice_enc_hash = stable_hash(alice_scope)
+    eve_emb_hash = stable_hash({**eve_scope, "embedding": EMB_CONFIG})
+    alice_emb_hash = stable_hash({**alice_scope, "embedding": EMB_CONFIG})
     return eve_enc_hash, alice_enc_hash, eve_emb_hash, alice_emb_hash
 
 def precision_recall_f1(y_true, y_pred):
@@ -447,9 +429,10 @@ def create_synthetic_data_splits(GLOBAL_CONFIG, ENC_CONFIG, data_dir, alice_enc_
     n_total = len(all_data) - 1  # Subtract header
     n_reidentified = int(n_total * overlap_ratio)
     
-    # Random sampling
+    # Random sampling. A local RNG avoids depending on unrelated call order.
     indices = list(range(1, len(all_data)))  # Skip header
-    reidentified_indices = random.sample(indices, n_reidentified)
+    rng = random.Random(int(GLOBAL_CONFIG.get("Seed", 42)))
+    reidentified_indices = rng.sample(indices, n_reidentified)
     not_reidentified_indices = [i for i in indices if i not in reidentified_indices]
     
     # Create reidentified data (training data) - full format for training
@@ -495,34 +478,9 @@ def load_experiment_datasets(
     encoder_spec = get_encoder_spec(ENC_CONFIG["AliceAlgo"])
     DatasetClass = encoder_spec.load_dataset_class()
 
-    if encoder_spec.needs_integer_vocabulary:
-        # Calculate unique integers from the complete dataset to ensure consistent tensor dimensions
-        # Using df_all ensures we capture all possible hash values that could appear in any subset
-        
-        # Parse the string representation of sets to extract actual integers
-        def parse_twostephash_string(twostephash_str):
-            # Remove curly braces and split by comma
-            # Handle both string format "{1, 2, 3}" and actual set objects
-            if isinstance(twostephash_str, str):
-                # Remove curly braces and split by comma
-                content = twostephash_str.strip('{}')
-                if content:  # Handle empty sets
-                    return [int(x.strip()) for x in content.split(',')]
-                else:
-                    return []
-            else:
-                # If it's already a set or list, convert to list of ints
-                return [int(x) for x in twostephash_str]
-        
-        # Extract all unique integers from all twostephash entries
-        all_ints = []
-        for twostephash_entry in df_all[encoder_spec.column_name]:
-            all_ints.extend(parse_twostephash_string(twostephash_entry))
-        
-        unique_ints = sorted(set(all_ints))
-        dataset_args = {"all_integers": unique_ints}
-    else:
-        dataset_args = {}
+    # Encoder-specific preprocessing lives with the registry adapter, keeping
+    # this pipeline independent of the representation being tensorized.
+    dataset_args = encoder_spec.build_dataset_kwargs(df_all)
     common_args = {
         "is_labeled": True,
         "all_bi_grams": all_bi_grams,
@@ -533,7 +491,12 @@ def load_experiment_datasets(
     data_test = DatasetClass(df_test, **common_args, **dataset_args)
     train_size = int(nepal_CONFIG["TrainSize"] * len(data_labeled))
     val_size = len(data_labeled) - train_size
-    data_train, data_val = random_split(data_labeled, [train_size, val_size])
+    split_generator = torch.Generator().manual_seed(int(GLOBAL_CONFIG.get("Seed", 42)))
+    data_train, data_val = random_split(
+        data_labeled,
+        [train_size, val_size],
+        generator=split_generator,
+    )
     result = {"train": data_train, "val": data_val, "test": data_test}
     # Save all splits to cache for future use
     with open(cache_path, 'wb') as f:

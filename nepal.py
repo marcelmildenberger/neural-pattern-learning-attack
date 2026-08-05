@@ -21,6 +21,8 @@ import ray
 from ray import tune, train
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
+from optuna.samplers import TPESampler
+from utils.reproducibility import seed_everything, seeded_generator
 
 def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG):
     """
@@ -28,11 +30,14 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     """
     # Ignore optuna warnings.
     warnings.filterwarnings("ignore", category=UserWarning, module="optuna")
+    seed = int(GLOBAL_CONFIG.get("Seed", 42))
+    deterministic = bool(GLOBAL_CONFIG.get("DeterministicAlgorithms", True))
+    seed_everything(seed, deterministic=deterministic)
     # Set default values for alignment and global configuration.
     # ALIGN_CONFIG["RegWS"] is set to the maximum of 0.1 and one third of the overlap parameter.
     # GLOBAL_CONFIG["Workers"] is set to the number of available CPU cores
     ALIGN_CONFIG["RegWS"] = max(0.1, GLOBAL_CONFIG["Overlap"] / 3)
-    GLOBAL_CONFIG["Workers"] = max_cpu_cores = os.cpu_count()
+    GLOBAL_CONFIG["Workers"] = max_cpu_cores = os.cpu_count() or 1
     
     # Validate and set parallel trials configuration
     parallel_trials = NEPAL_CONFIG["ParallelTrials"]
@@ -60,7 +65,7 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     # The directory name encodes the algorithm, dataset, and timestamp for traceability.
     # All configuration dictionaries are saved to a config.txt file in this directory for reproducibility.
     selected_dataset = GLOBAL_CONFIG["Data"].split("/")[-1].replace(".tsv", "")
-    experiment_tag = "experiment_" + ENC_CONFIG["AliceAlgo"] + "_" + selected_dataset + "_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    experiment_tag = "experiment_" + ENC_CONFIG["AliceAlgo"] + "_" + selected_dataset + "_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
     current_experiment_directory = f"experiment_results/{experiment_tag}"
     os.makedirs(current_experiment_directory, exist_ok=True)
 
@@ -74,7 +79,6 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     
     with open(os.path.join(current_experiment_directory, "config.json"), "w") as f:
         json.dump(all_configs, f, indent=4)
-    
     # Initialize elapsed times to 0 (will be updated if timing is enabled)
     elapsed_gma = 0
     elapsed_hyperparameter_optimization = 0
@@ -183,7 +187,11 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     )
 
     # Initialize the Optuna search and the ASHAScheduler.
-    optuna_search = OptunaSearch(metric=NEPAL_CONFIG["MetricToOptimize"], mode="max")
+    optuna_search = OptunaSearch(
+        metric=NEPAL_CONFIG["MetricToOptimize"],
+        mode="max",
+        sampler=TPESampler(seed=seed),
+    )
     scheduler = ASHAScheduler(metric="total_val_loss", mode="min")
 
     # Define the trainable function.
@@ -260,30 +268,34 @@ def run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
     datasets = load_experiment_datasets(data_dir, alice_enc_hash, identifier, ENC_CONFIG, NEPAL_CONFIG, GLOBAL_CONFIG, all_bi_grams, splits=("train", "val", "test"))
     data_train, data_val, data_test = datasets["train"], datasets["val"], datasets["test"]
 
+    # Reset the root-process RNG after HPO so final training does not depend on
+    # how trials were scheduled or how long they ran.
+    seed_everything(seed, deterministic=deterministic)
     input_dim=data_train[0][0].shape[0]
     dataloader_train = DataLoader(
         data_train,
         batch_size=int(best_config.get("batch_size", 32)),
         shuffle=True,
-        pin_memory=True,
+        pin_memory=use_gpu,
         num_workers=GLOBAL_CONFIG["Workers"] // 15 if GLOBAL_CONFIG["UseGPU"] else 0,
+        generator=seeded_generator(seed),
     )
     dataloader_val = DataLoader(
         data_val,
         batch_size=int(best_config.get("batch_size", 32)),
         shuffle=False,
-        pin_memory=True,
+        pin_memory=use_gpu,
         num_workers=GLOBAL_CONFIG["Workers"] // 15 if GLOBAL_CONFIG["UseGPU"] else 0,
     )
     dataloader_test = DataLoader(
         data_test,
         batch_size=int(best_config.get("batch_size", 32)),
         shuffle=False,
-        pin_memory=True,
+        pin_memory=use_gpu,
         num_workers=GLOBAL_CONFIG["Workers"] // 15 if GLOBAL_CONFIG["UseGPU"] else 0,
     )
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if use_gpu and torch.cuda.is_available() else "cpu")
     
     model = BaseModel(
         input_dim=input_dim,

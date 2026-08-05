@@ -24,15 +24,22 @@ The simplest way to reproduce the NEPAL pipeline is to run the implementation re
 The following setup reproduces the environment used during paper preparation:
 
 ```bash
-git clone <nepal-repository>
-cd <nepal-repository>
-git submodule update --init --recursive --remote
+git clone --recurse-submodules https://github.com/marcelmildenberger/dataset-extension-attack.git
+cd dataset-extension-attack
 
 docker build -t nepal .
 docker run --gpus all -it -v $(pwd):/usr/app nepal bash
 ```
 Note: GPU access is optional but strongly recommended for hyperparameter optimization.
 The repository will be mounted inside the container at /usr/app.
+
+The dependencies are pinned in `requirements.txt`, and the submodule is checked out at the commit recorded by this repository. Do not add `--remote` to the submodule command when reproducing a historical revision.
+
+For a native Python 3.10 environment, install `requirements.txt` on Linux or `requirements_macOS.txt` on macOS. Then run the inexpensive preflight:
+
+```bash
+python3 main.py --config nepal_config.json --validate-only
+```
 
 
 ## Running the Default NEPAL Case
@@ -49,6 +56,13 @@ This command launches the complete NEPAL pipeline, including:
 
 Results are written to the [experiment_results](experiment_results) directory.
 See [docs/parameters.md](docs/parameters.md) for a detailed explanation of configuration options and schema.
+
+To validate a custom configuration without starting training, run:
+
+```bash
+python3 main.py --config my_config.json --validate-only
+python3 main.py --list-encoders
+```
 
 ## Prepare your Dataset
 The code expects a tab-separated file with one record per row. The first row must be a 

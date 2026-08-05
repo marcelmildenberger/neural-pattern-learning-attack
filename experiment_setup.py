@@ -25,6 +25,8 @@ GLOBAL_CONFIG = {
     "UseNoisyDatasets": True,
     # If Graph Matching Attack is disabled, overlap will instead be used as the NEPAL training proportion.
     "GraphMatchingAttack": False,
+    "Seed": 42,
+    "DeterministicAlgorithms": True,
 }
 
 # === NEPAL Training Parameters ===
@@ -166,6 +168,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--early-stop-threshold", type=float, default=NEPAL_CONFIG["EarlyStopThreshold"])
     parser.add_argument("--bf-diffusion", action="store_true", help="Use *_bfd_encoded.tsv for BloomFilter runs.")
     parser.add_argument("--no-gpu", action="store_true", help="Disable CUDA usage.")
+    parser.add_argument("--seed", type=int, default=GLOBAL_CONFIG["Seed"], help="Experiment random seed.")
+    parser.add_argument(
+        "--allow-nondeterministic",
+        action="store_true",
+        help="Allow faster algorithms whose exact outputs may vary between runs.",
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose experiment output.")
     parser.add_argument("--dry-run", action="store_true", help="Print planned runs without executing them.")
     parser.add_argument("--check-inputs", action="store_true", help="Check encoded input files during --dry-run.")
@@ -232,6 +240,8 @@ def build_configs(run, args):
             "UseNoisyDatasets": not args.clean,
             "UseGPU": not args.no_gpu,
             "Verbose": args.verbose,
+            "Seed": args.seed,
+            "DeterministicAlgorithms": not args.allow_nondeterministic,
         }
     )
     nepal_config.update(

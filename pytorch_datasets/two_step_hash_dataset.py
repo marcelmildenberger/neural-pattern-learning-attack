@@ -5,14 +5,35 @@ from utils.string_utils import *
 from torch.utils.data import Dataset
 
 
+def parse_twostephash_string(value):
+    """Parse a serialized integer set used by Two-Step Hash encodings."""
+    if isinstance(value, str):
+        content = value.strip("{}")
+        return [int(item.strip()) for item in content.split(",")] if content else []
+    return [int(item) for item in value]
+
+
+def build_dataset_kwargs(*, data, column_name):
+    """Build one stable vocabulary shared by train, validation, and test."""
+    unique_integers = {
+        value
+        for encoding in data[column_name]
+        for value in parse_twostephash_string(encoding)
+    }
+    return {"all_integers": sorted(unique_integers)}
+
+
 class TwoStepHashDataset(Dataset):
     def __init__(self, data, is_labeled=False, all_integers=None, dev_mode=False, all_bi_grams=None):
         self.isLabeled = is_labeled
         self.allIntegers = all_integers
+        self.integerIndices = {value: index for index, value in enumerate(all_integers)}
         self.allTwoGrams = all_bi_grams
         self.devMode = dev_mode
 
-        self.hashTensors = data['twostephash'].apply(lambda row: self.hash_list_to_tensor(self.parse_twostephash_string(row)))
+        self.hashTensors = data['twostephash'].apply(
+            lambda row: self.hash_list_to_tensor(parse_twostephash_string(row))
+        )
         self.uids = data['uid']
 
         if self.isLabeled:
@@ -32,26 +53,11 @@ class TwoStepHashDataset(Dataset):
         else:
             return self.hashTensors[idx], self.uids[idx]
 
-    def parse_twostephash_string(self, twostephash_str):
-        """Parse the string representation of a set to extract actual integers."""
-        # Handle both string format "{1, 2, 3}" and actual set objects
-        if isinstance(twostephash_str, str):
-            # Remove curly braces and split by comma
-            content = twostephash_str.strip('{}')
-            if content:  # Handle empty sets
-                return [int(x.strip()) for x in content.split(',')]
-            else:
-                return []
-        else:
-            # If it's already a set or list, convert to list of ints
-            return [int(x) for x in twostephash_str]
-
     def hash_list_to_tensor(self, hash_list):
         hash_array = np.zeros(len(self.allIntegers), dtype=np.float32)
         for val in hash_list:
-            if val in self.allIntegers:
-                index = self.allIntegers.index(val)
+            index = self.integerIndices.get(val)
+            if index is not None:
                 hash_array[index] = 1
         return torch.tensor(hash_array)
-
 

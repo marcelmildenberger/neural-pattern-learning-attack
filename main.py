@@ -9,7 +9,9 @@ import sys
 import argparse
 from typing import Dict, Any
 import traceback
-from nepal import run_nepal
+
+from utils.configuration import normalize_and_validate_config, required_input_paths
+from utils.encoder_registry import ENCODER_SPECS
 
 
 def load_config(config_path: str = "nepal_config.json") -> Dict[str, Any]:
@@ -58,6 +60,18 @@ def main():
         default="nepal_config.json",
         help="Path to configuration file (default: nepal_config.json)"
     )
+
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Validate configuration and required input files without starting an experiment",
+    )
+
+    parser.add_argument(
+        "--list-encoders",
+        action="store_true",
+        help="List registered encoder aliases and capabilities, then exit",
+    )
     
     parser.add_argument(
         "--verbose", 
@@ -68,11 +82,27 @@ def main():
     args = parser.parse_args()
     
     try:
+        if args.list_encoders:
+            for spec in ENCODER_SPECS.values():
+                capabilities = []
+                if spec.dataset_class:
+                    capabilities.append("NEPAL")
+                if spec.precomputed_encoder_class:
+                    capabilities.append("GMA")
+                print(f"{spec.cli_alias:>4}  {spec.name:<16} {','.join(capabilities) or 'metadata only'}")
+            return 0
+
         # Load configuration
         if args.verbose:
             print(f"[INFO] Loading configuration from: {args.config}")
         
-        config = load_config(args.config)
+        config = normalize_and_validate_config(load_config(args.config))
+
+        if args.validate_only:
+            print(f"Configuration is valid: {args.config}")
+            for input_path in required_input_paths(config):
+                print(f"- input: {input_path}")
+            return 0
         
         # Extract configuration sections
         GLOBAL_CONFIG = config["GLOBAL_CONFIG"]
@@ -93,6 +123,9 @@ def main():
             print(f"[INFO] Dataset: {GLOBAL_CONFIG.get('Data', 'Not specified')}")
             print(f"[INFO] Encoding Algorithm: {ENC_CONFIG.get('AliceAlgo', 'Not specified')}")
         
+        # Import the training stack only after the inexpensive preflight passes.
+        from nepal import run_nepal
+
         # Run the experiment
         exit_code = run_nepal(GLOBAL_CONFIG, ENC_CONFIG, EMB_CONFIG, ALIGN_CONFIG, NEPAL_CONFIG)
         

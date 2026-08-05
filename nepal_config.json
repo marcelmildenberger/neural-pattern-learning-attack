@@ -15,7 +15,9 @@
         "SaveModel": false,
         "SavePredictions": false,
         "UseNoisyDatasets": true,
-        "GraphMatchingAttack": false
+        "GraphMatchingAttack": false,
+        "Seed": 42,
+        "DeterministicAlgorithms": true
     },
     "ENC_CONFIG": {
         "AliceAlgo": "BloomFilter",
@@ -97,10 +99,11 @@
         "TrainSize": 0.8,
         "Patience": 5,
         "MinDelta": 0.0001,
-        "NumSamples": 10,
-        "ParallelTrials": 5,
+        "NumSamples": 125,
+        "ParallelTrials": 1,
         "Epochs": 25,
         "MetricToOptimize": "average_dice",
-        "MatchingTechnique": "greedy"
+        "MatchingTechnique": "greedy",
+        "EarlyStopThreshold": 0.99
     }
 }

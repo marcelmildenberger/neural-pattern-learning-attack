@@ -16,14 +16,15 @@ ___
 
 | Parameter Name  | Description                                | Default |
 |-----------------|--------------------------------------------|---------|
-| ParallelTrials         | Number of Parallel Trials for Ray Tune Hyperparameter Optimization.          | 5   |
+| ParallelTrials         | Number of parallel Ray Tune trials. Use 1 for repeatable Optuna trial ordering.          | 1   |
 | TrainSize | Sets Training-Validation Split Ratio.            | 0.8       |
 | Patience | Patience Epochs for Early Stopping.                    | 5      |
 | MinDelta | Minimum improvement in the monitored metric required to reset early stopping patience. | 1e-4      |
-| NumSamples   | Amount of Hyperparameter Optimization trials sampled from the search space.   | 125      |
+| NumSamples   | Amount of Hyperparameter Optimization trials sampled from the search space.   | 10      |
 | Epochs   | Maximum number of Epochs for Training.   | 25      |
 | MetricToOptimize   | Metric to optimize for in the Hyperparameter Optimization (average_dice, average_precision, average_recall).   | "average_dice"      |
 | MatchingTechnique   | Reconstruction Strategy (greedy only option, further extensions possible).   | "greedy"      |
+| EarlyStopThreshold | Stop a tuning trial after the optimized metric reaches this value. | 0.99 |
 
 ___
 
@@ -32,12 +33,12 @@ ___
 
 | Parameter Name | Description                                                                                                                                                                                     | Default                   |
 |----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------|
-| Data           | Dataset to run the attack on.                                                                                                                                                                   | "./data/titanic_full.tsv" |
-| Overlap        | If GMA enabled: The share of overlapping records between the attacker's and the victim's data. Must be >0 and <=1. If GMA is disabled: the randomly sampled training proportion from the dataset (synthetic data split)                                                                                     | 1                         |
-| DropFrom       | Which dataset should records be dropped from to achieve the desired overlap? One of "Eve" (Attacker), "Alice" (Victim) or "Both".                                                               | "Alice"                   |
+| Data           | Dataset stem to run the attack on. The encoded suffix is resolved through the encoder registry.                                                                                                                                                                   | "./data/datasets/noisy/fakename_1k.tsv" |
+| Overlap        | If GMA enabled: the share of overlapping records. If GMA is disabled: the known plaintext/encoding share. Must be >0 and <=1.                                                                                     | 0.5                         |
+| DropFrom       | Which dataset should records be dropped from to achieve GMA overlap? One of "Eve", "Alice" or "Both".                                                               | "Eve"                   |
 | DevMode        | If True, additional dev data is saved                                              | False                     |
 | BenchMode      | If True, the NEPAL attack is timed and duration of the attack is reported.                                          | True                     |
-| Verbose        | If True, prints detailed status messages.                                                                                                                | True                      |
+| Verbose        | If True, prints detailed status messages.                                                                                                                | False                      |
 | MatchingMetric | Similarity metric to be computed on aligned embeddings during bipartite graph matching.                                                                  | "cosine"                  |
 | Matching       | Matching algorithm for bipartite graph matching. Must be "MinWeight", "Stable", "Symmetric" or "NearestNeighbor".                                        | "MinWeight"               |                       |
 | SaveAliceEncs | Stores a pickled dictionary containing UIDs as keys and encodings for Alice's Dataset.                            | False                     |
@@ -47,6 +48,9 @@ ___
 | SaveModel   | Save the final trained neural network model.   | False      |
 | SavePredictions   | Save the predicted q-grams for each record with performance metrics.   | False      |
 | GraphMatchingAttack   | Enable or Disable running the GMA to produce the known plaintext-encoding pairs. If disabled, a synthetic datasplit will be created   | False      |
+| UseNoisyDatasets | Mark the input as belonging to the noisy-dataset workflow. | True |
+| Seed | Seed used by splitting, HPO, model training, and stochastic pipeline components. It is also included in cache keys. | 42 |
+| DeterministicAlgorithms | Ask PyTorch to prefer deterministic algorithms and report operations without deterministic implementations. | True |
 ___
 
 ## Encoding Configuration

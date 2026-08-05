@@ -20,7 +20,11 @@ Each `EncoderSpec` declares:
 - `encoded_suffix`: file suffix such as `_bf_encoded.tsv`
 - `column_name`: encoded TSV column immediately before `uid`
 - `dataset_class`: PyTorch dataset class used by NEPAL
-- `needs_integer_vocabulary`: set this when a sparse set encoding needs a stable integer-to-index vocabulary
+- `dataset_kwargs_factory`: optional dotted callable that derives representation-specific loader arguments from the complete dataset
+- `precomputed_encoder_class`: optional graph-matching adapter for the encoded on-disk representation
+- `precomputed_kwargs_factory`: optional dotted callable that supplies constructor arguments to that adapter
+
+The registry resolves aliases, file names, training loaders, and GMA adapters. New schemes therefore do not require branches in `utils/utils.py` or `graphMatching/gma_pipeline.py`.
 
 ### 2. Add a PyTorch Dataset Loader
 
@@ -62,11 +66,13 @@ An encoding job declares:
 
 Synthetic NEPAL mode only needs the encoded TSV and PyTorch dataset loader. GMA-NEPAL mode also needs graph-matching support.
 
-If the new encoder is used with `GraphMatchingAttack=true`, `graphMatching/gma_pipeline.py` needs a compatible precomputed encoder path. Existing supported shapes are:
+If the new encoder is used with `GraphMatchingAttack=true`, register a compatible `precomputed_encoder_class`. Existing reusable adapters are:
 
 - binary bit strings: `PrecomputedBinaryEncoder`
 - integer sets: `PrecomputedSetEncoder`
 - TabMinHash strings: `PrecomputedTMHEncoder`
+
+If none fits, implement an `Encoder` subclass with `encode_and_compare_and_append`, then reference its dotted class path in the registry. A synthetic-only scheme may leave the GMA fields empty.
 
 ### 5. Update Configs and Docs
 
@@ -80,3 +86,14 @@ Add the encoder name to relevant experiment configs and docs only after the load
 - Encoded data must include stable unique `uid` values.
 - If you change loader semantics, clear `data/cache/` before rerunning experiments.
 - If the encoder output is variable length, define a deterministic vectorization strategy before training.
+
+## Validate the Integration
+
+The following commands catch missing capabilities and naming mismatches without starting an expensive experiment:
+
+```bash
+python3 main.py --list-encoders
+python3 main.py --config path/to/config.json --validate-only
+```
+
+If encoding generation uses randomness, expose a seed and use a local random-number generator so the scheme does not alter randomness elsewhere in the pipeline.

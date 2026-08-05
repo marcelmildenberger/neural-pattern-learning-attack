@@ -123,6 +123,7 @@ def encode_with_tsh(data: List[List[str]], uids: List[str], args: argparse.Names
         secret=args.secret,
         verbose=args.verbose,
         workers=args.jobs,
+        seed=args.seed,
     )
     _, combined = encoder.encode_and_compare_and_append(data, uids, metric="dice", sim=True, store_encs=False)
     return combined
@@ -146,6 +147,7 @@ def main() -> None:
     parser.add_argument("--jobs", type=int, default=-1, help="Parallel workers for TMH/TSH (-1 = all cores).")
     parser.add_argument("--verbose", action="store_true", help="Enable tqdm output inside TMH/TSH.")
     parser.add_argument("--secret", type=str, default=DEFAULT_SECRET, help="Secret/salt passed to the encoders.")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for encoder setup (default: 42).")
     parser.add_argument("--ngram-size", type=int, default=DEFAULT_NGRAM_SIZE, help="N-gram size for all encoders.")
     parser.add_argument("--bf-length", type=int, default=DEFAULT_BF_LENGTH)
     parser.add_argument("--bf-bits", type=int, default=DEFAULT_BF_BITS)

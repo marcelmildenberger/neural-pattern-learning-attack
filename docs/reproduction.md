@@ -1,10 +1,13 @@
 # Reproduce our Experiments
 These are the steps required to reproduce the results we reported in our paper.
 
-**Note:** Several parts of the attack, most importantly hyperparameter optimization, encoding, embedding and
-alignment, involve randomness. It is thus extremely unlikely that you are able to
-perfectly reproduce our results. However, the overall difference in results should be
-negligible.
+**Note:** Encoding generation, data splitting, hyperparameter search, model training,
+embedding, and alignment use `GLOBAL_CONFIG.Seed` (42 by default). The default single-trial
+scheduler and deterministic PyTorch setting make repeated runs on the same software and
+hardware stack as stable as practical. Floating-point results can still differ across
+operating systems, accelerators, and driver versions. Parallel asynchronous HPO can also
+change the order in which Optuna observes trials; use `--parallel-trials 1` when exact
+repeatability matters more than runtime.
 
 **Another Note:** Re-Running all experiments will take a considerable amount of time. Depending on your
 system specification you might face runtimes in excess of a week.
@@ -25,6 +28,18 @@ The experiments were run on a virtual machine with the following specification:
 The Docker image is based on `pytorch/pytorch:2.2.0-cuda11.8-cudnn8-runtime`, matching the pinned `torch==2.2.0` and `torchvision==0.17.0` versions in `requirements.txt`.
 The image build verifies those versions after dependency installation.
 
+Clone the repository and its pinned submodule revision, then run the configuration and input preflight:
+
+```bash
+git clone --recurse-submodules https://github.com/marcelmildenberger/dataset-extension-attack.git
+cd dataset-extension-attack
+docker build -t nepal .
+docker run --rm -v "$(pwd):/usr/app" nepal python3 main.py --config nepal_config.json --validate-only
+```
+
+For a native setup, use Python 3.10 and install `requirements.txt` on Linux or
+`requirements_macOS.txt` on macOS. All declared dependency versions are exact pins.
+
 ___
 ### Obtain Datasets
 Make sure that you have all required datasets in the  `./data` directory.
@@ -39,7 +54,7 @@ Remember to [prepare](../README.md) the dataset so it fits the correct file form
 **Note:** To run the attack on a synthetic dataset, you need to provide an encoded version of the dataset for BF, TMH and TSH where the encoding is provided before the uid column.
 Clean encoded FakeName files are not stored in the repository by default. Regenerate them with:
 
-``python3 encode_datasets.py --source-dir data/datasets --encoders bf tmh tsh``
+``python3 encode_datasets.py --source-dir data/datasets --encoders bf tmh tsh --seed 42``
 
 Use `--encoders bfd` as well if you want diffused Bloom filter files.
 
@@ -60,9 +75,13 @@ To inspect the full matrix without running it:
 
 ``python3 experiment_setup.py --dry-run``
 
+Validate the default single-run configuration and its input files before committing compute:
+
+``python3 main.py --config nepal_config.json --validate-only``
+
 To run a smaller custom matrix:
 
-``python3 experiment_setup.py --datasets fakename_1k.tsv fakename_5k.tsv --encoders bf tsh --overlaps 0.2 0.8 --num-samples 25 --epochs 10``
+``python3 experiment_setup.py --datasets fakename_1k.tsv fakename_5k.tsv --encoders bf tsh --overlaps 0.2 0.8 --num-samples 25 --epochs 10 --seed 42 --parallel-trials 1``
 
 Common options include `--train-size`, `--parallel-trials`, `--no-gpu`, `--max-runs`, and `--bf-diffusion`.
 

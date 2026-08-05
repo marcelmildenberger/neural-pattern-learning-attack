@@ -8,10 +8,14 @@ from torch.utils.data import DataLoader
 import torch.optim as optim
 import torch.nn as nn
 from ray import tune, train
+from utils.reproducibility import seed_everything, seeded_generator
 
 # Define a function to train a model with a given configuration.
 # This function is used by Ray Tune to train models with different hyperparameters.
 def hyperparameter_training(config, data_dir, output_dim, alice_enc_hash, identifier, patience, min_delta, workers, ENC_CONFIG, NEPAL_CONFIG, GLOBAL_CONFIG, bi_gram_dict, all_bi_grams):
+    seed = int(GLOBAL_CONFIG.get("Seed", 42))
+    deterministic = bool(GLOBAL_CONFIG.get("DeterministicAlgorithms", True))
+    seed_everything(seed, deterministic=deterministic)
     # Sample all hyperparameters up front
     batch_size = int(config["batch_size"])
     num_layers = config["num_layers"]
@@ -32,18 +36,23 @@ def hyperparameter_training(config, data_dir, output_dim, alice_enc_hash, identi
         data_train,
         batch_size=batch_size,
         shuffle=True,
-        pin_memory=True,
+        pin_memory=bool(GLOBAL_CONFIG.get("UseGPU", False)),
         num_workers=workers,
+        generator=seeded_generator(seed),
     )
     dataloader_val = DataLoader(
         data_val,
         batch_size=batch_size,
         shuffle=False,
-        pin_memory=True,
+        pin_memory=bool(GLOBAL_CONFIG.get("UseGPU", False)),
         num_workers=workers,
     )
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        "cuda:0"
+        if GLOBAL_CONFIG.get("UseGPU", False) and torch.cuda.is_available()
+        else "cpu"
+    )
     model = BaseModel(
         input_dim=input_dim,
         output_dim=output_dim,
