@@ -31,8 +31,8 @@ The image build verifies those versions after dependency installation.
 Clone the repository and its pinned submodule revision, then run the configuration and input preflight:
 
 ```bash
-git clone --recurse-submodules https://github.com/marcelmildenberger/dataset-extension-attack.git
-cd dataset-extension-attack
+git clone --recurse-submodules https://github.com/marcelmildenberger/neural-pattern-learning-attack.git
+cd neural-pattern-learning-attack
 docker build -t nepal .
 docker run --rm -v "$(pwd):/usr/app" nepal python3 main.py --config nepal_config.json --validate-only
 ```

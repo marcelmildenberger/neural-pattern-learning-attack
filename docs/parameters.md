@@ -20,7 +20,7 @@ ___
 | TrainSize | Sets Training-Validation Split Ratio.            | 0.8       |
 | Patience | Patience Epochs for Early Stopping.                    | 5      |
 | MinDelta | Minimum improvement in the monitored metric required to reset early stopping patience. | 1e-4      |
-| NumSamples   | Amount of Hyperparameter Optimization trials sampled from the search space.   | 10      |
+| NumSamples   | Amount of Hyperparameter Optimization trials sampled from the search space.   | 125      |
 | Epochs   | Maximum number of Epochs for Training.   | 25      |
 | MetricToOptimize   | Metric to optimize for in the Hyperparameter Optimization (average_dice, average_precision, average_recall).   | "average_dice"      |
 | MatchingTechnique   | Reconstruction Strategy (greedy only option, further extensions possible).   | "greedy"      |

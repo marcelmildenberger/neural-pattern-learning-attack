@@ -24,8 +24,8 @@ The simplest way to reproduce the NEPAL pipeline is to run the implementation re
 The following setup reproduces the environment used during paper preparation:
 
 ```bash
-git clone --recurse-submodules https://github.com/marcelmildenberger/dataset-extension-attack.git
-cd dataset-extension-attack
+git clone --recurse-submodules https://github.com/marcelmildenberger/neural-pattern-learning-attack.git
+cd neural-pattern-learning-attack
 
 docker build -t nepal .
 docker run --gpus all -it -v $(pwd):/usr/app nepal bash
