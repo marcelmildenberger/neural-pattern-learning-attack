@@ -197,7 +197,7 @@ def run_nepal(
 
     # Get the data directory and identifier for the current run to check if the data is already available. 
     gma_enabled = GLOBAL_CONFIG["GraphMatchingAttack"]
-    data_dir = os.path.abspath("./data")
+    data_dir = os.path.abspath(GLOBAL_CONFIG.get("DataDirectory", "./data"))
     suffix = "" if gma_enabled else "_synthetic"
     noisy = "_noisy" if GLOBAL_CONFIG["UseNoisyDatasets"] else ""
     seed_suffix = "" if gma_enabled else f"_seed{resolved_seed}"
